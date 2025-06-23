@@ -1,0 +1,56 @@
+environment: development
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  readTimeout: 30s
+  writeTimeout: 30s
+  idleTimeout: 120s
+  shutdownTimeout: 30s
+  enableCORS: true
+  trustedProxies: []
+
+database:
+  host: "localhost"
+  port: 5432
+  name: "rule_engine_dev"
+  user: "postgres"
+  password: "postgres"
+  sslMode: "disable"
+  maxConnections: 100
+  maxIdleConns: 10
+  connMaxLifetime: 1h
+  queryTimeout: 30s
+  url: ""
+
+cache:
+  refreshIntervalSec: 60
+  refreshJitterSec: 10
+  refreshTimeout: 10s
+  maxSizeMB: 100
+  circuitBreaker:
+    enabled: true
+    failureThreshold: 3
+    recoveryTimeout: 60s
+    maxRequests: 10
+
+jwt:
+  secret: "dev-secret-key-change-in-production"
+  tokenExpiration: 24h
+  requiredClaims: ["sub", "exp"]
+  validAudiences: ["rule-engine"]
+  validIssuers: ["auth-service"]
+  skipExpiryCheck: false
+
+metrics:
+  enabled: true
+  path: "/metrics"
+  port: 9090
+  namespace: "rule_engine"
+  subsystem: "api"
+
+logger:
+  level: "debug"
+  format: "console"
+  enableCaller: true
+  timeFormat: "2006-01-02T15:04:05Z07:00" 

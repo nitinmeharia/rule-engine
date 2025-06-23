@@ -1,0 +1,150 @@
+package server
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rule-engine/internal/config"
+	"github.com/rule-engine/internal/handlers"
+	"github.com/rule-engine/internal/infra/logger"
+	"github.com/rule-engine/internal/models/db"
+	"github.com/rule-engine/internal/repository"
+	"github.com/rule-engine/internal/service"
+)
+
+// Server represents the HTTP server
+type Server struct {
+	httpServer       *http.Server
+	router           *gin.Engine
+	config           *config.Config
+	db               *pgxpool.Pool
+	logger           *logger.Logger
+	namespaceHandler *handlers.NamespaceHandler
+	address          string
+}
+
+// New creates a new HTTP server instance
+func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Server, error) {
+	// Set Gin mode based on environment
+	if cfg.IsProduction() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	// Create Gin router
+	router := gin.New()
+
+	// Add comprehensive logging and error handling middleware
+	router.Use(
+		ErrorRecoveryMiddleware(),   // Panic recovery with stack traces
+		ContextLoggingMiddleware(),  // Request ID and context logging
+		RequestLoggingMiddleware(),  // Request body logging
+		ResponseLoggingMiddleware(), // Response logging
+		DatabaseErrorMiddleware(),   // Database error logging
+		JWTMiddleware(&cfg.JWT),     // JWT authentication
+		LoggingMiddleware(),         // Standard HTTP logging
+	)
+
+	// Initialize database queries
+	queries := db.New(database)
+
+	// Initialize repositories
+	namespaceRepo := repository.NewNamespaceRepository(queries)
+
+	// Initialize services
+	namespaceService := service.NewNamespaceService(namespaceRepo)
+
+	// Initialize handlers
+	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
+
+	// Create server instance first
+	server := &Server{
+		router:           router,
+		config:           cfg,
+		db:               database,
+		logger:           log,
+		namespaceHandler: namespaceHandler,
+		address:          cfg.Server.GetServerAddress(),
+	}
+
+	// Health check endpoint (no authentication required)
+	router.GET("/health", server.healthCheck)
+
+	// API v1 routes with authentication
+	v1 := router.Group("/v1")
+	{
+		// Namespace routes - require admin role for write operations
+		namespaces := v1.Group("/namespaces")
+		{
+			namespaces.GET("", RequireAnyRole("admin", "viewer", "executor"), namespaceHandler.ListNamespaces)
+			namespaces.POST("", RequireRole("admin"), namespaceHandler.CreateNamespace)
+			namespaces.GET("/:id", RequireAnyRole("admin", "viewer", "executor"), namespaceHandler.GetNamespace)
+			namespaces.DELETE("/:id", RequireRole("admin"), namespaceHandler.DeleteNamespace)
+		}
+	}
+
+	// Create HTTP server
+	srv := &http.Server{
+		Addr:         cfg.Server.GetServerAddress(),
+		Handler:      router,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
+	}
+
+	server.httpServer = srv
+
+	return server, nil
+}
+
+// Start starts the HTTP server
+func (s *Server) Start() error {
+	s.logger.Info().
+		Str("address", s.httpServer.Addr).
+		Msg("Starting HTTP server")
+
+	return s.httpServer.ListenAndServe()
+}
+
+// Stop gracefully stops the HTTP server
+func (s *Server) Stop(ctx context.Context) error {
+	s.logger.Info().Msg("Stopping HTTP server")
+	return s.httpServer.Shutdown(ctx)
+}
+
+// setupRoutes configures all API routes
+func (s *Server) setupRoutes() {
+	// Health check
+	s.router.GET("/health", s.healthCheck)
+
+	// API v1 routes
+	v1 := s.router.Group("/v1")
+	{
+		// Namespace routes
+		namespaces := v1.Group("/namespaces")
+		{
+			namespaces.POST("", s.namespaceHandler.CreateNamespace)
+			namespaces.GET("", s.namespaceHandler.ListNamespaces)
+			namespaces.GET("/:id", s.namespaceHandler.GetNamespace)
+			namespaces.DELETE("/:id", s.namespaceHandler.DeleteNamespace)
+		}
+
+		// TODO: Add other resource routes (fields, functions, rules, workflows, terminals)
+	}
+}
+
+// healthCheck returns server health status
+func (s *Server) healthCheck(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "healthy",
+		"timestamp": time.Now().UTC(),
+		"version":   "1.0.0", // TODO: Get from build info
+	})
+}
+
+// ServeHTTP implements http.Handler interface for testing
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.router.ServeHTTP(w, r)
+}
