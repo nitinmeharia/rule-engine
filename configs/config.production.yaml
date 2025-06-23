@@ -1,0 +1,40 @@
+# Production Environment Configuration
+# These settings override the base config.yaml for production
+
+environment: production
+
+server:
+  port: 8080
+  enableCORS: false  # Handle CORS at API Gateway level
+
+cache:
+  refreshIntervalSec: 60
+  refreshJitterSec: 10
+
+jwt:
+  # SECRET MUST BE SET VIA ENVIRONMENT VARIABLE: RULE_ENGINE_JWT_SECRET
+  tokenExpiration: 8h  # Shorter expiration in production
+  skipExpiryCheck: false
+
+logger:
+  level: info
+  format: json  # Structured logging for production
+  enableCaller: false
+
+database:
+  # DATABASE CONNECTION MUST BE SET VIA ENVIRONMENT VARIABLES:
+  # RULE_ENGINE_DATABASE_URL or individual components
+  sslMode: require
+  maxConnections: 20
+  maxIdleConns: 10
+  connMaxLifetime: 30m
+  queryTimeout: 30s
+
+metrics:
+  enabled: true
+
+rateLimit:
+  enabled: true
+  globalRPM: 2000    # Higher limits for production
+  perUserRPM: 200
+  executionRPM: 500 

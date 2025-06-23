@@ -1,0 +1,69 @@
+# Generic Rule Engine - Base Configuration
+# This is the base configuration that applies to all environments
+# Environment-specific overrides are in config.{environment}.yaml
+
+environment: development
+
+server:
+  port: 8080
+  host: "0.0.0.0"
+  readTimeout: 30s
+  writeTimeout: 30s
+  idleTimeout: 120s
+  shutdownTimeout: 30s
+  enableCORS: true
+  trustedProxies: []
+
+database:
+  host: localhost
+  port: 5432
+  name: rule_engine
+  user: postgres
+  password: ""
+  sslMode: disable
+  maxConnections: 10
+  maxIdleConns: 5
+  connMaxLifetime: 1h
+  queryTimeout: 10s
+  # Override with full URL if needed: postgresql://user:pass@host:port/db?sslmode=disable
+
+cache:
+  refreshIntervalSec: 60
+  refreshJitterSec: 10
+  refreshTimeout: 30s
+  maxSizeMB: 256
+  circuitBreaker:
+    enabled: true
+    failureThreshold: 5
+    recoveryTimeout: 60s
+    maxRequests: 3
+
+jwt:
+  secret: "dev-jwt-secret-change-in-production"
+  tokenExpiration: 24h
+  requiredClaims:
+    - clientId
+    - role
+  validAudiences: []
+  validIssuers: []
+  skipExpiryCheck: false
+
+metrics:
+  enabled: true
+  path: "/v1/metrics"
+  port: 0  # Use same port as server
+  namespace: "rule_engine"
+  subsystem: "api"
+
+logger:
+  level: info
+  format: console  # json, console
+  enableCaller: false
+  timeFormat: "2006-01-02T15:04:05Z07:00"
+
+rateLimit:
+  enabled: true
+  globalRPM: 1000     # Global requests per minute per IP
+  perUserRPM: 100     # Per-user requests per minute per JWT clientId
+  executionRPM: 200   # Execution requests per minute per JWT clientId
+  burstMultiplier: 2  # Allow burst of N times the rate 
