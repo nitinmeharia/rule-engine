@@ -27,12 +27,6 @@ TOTAL_TESTS=0
 PASSED_TESTS=0
 FAILED_TESTS=0
 
-# Function to clean up test data
-cleanup_test_data() {
-    print_status "INFO" "Cleaning up test data"
-    psql -U postgres -d rule_engine_dev -c "DELETE FROM functions WHERE namespace = 'test-functions'; DELETE FROM namespaces WHERE id = 'test-functions';" > /dev/null 2>&1 || true
-}
-
 # Function to print colored output
 print_status() {
     local status=$1
@@ -144,7 +138,7 @@ echo "    Functions API Testing"
 echo "=========================================="
 
 # Clean up any existing test data
-cleanup_test_data
+bash ./scripts/cleanup-test-data.sh
 
 # Generate tokens
 print_status "INFO" "Generating JWT tokens"

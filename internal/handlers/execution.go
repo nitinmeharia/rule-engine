@@ -10,13 +10,15 @@ import (
 
 // ExecutionHandler handles execution HTTP requests
 type ExecutionHandler struct {
-	engine *execution.Engine
+	engine          *execution.Engine
+	responseHandler *ResponseHandler
 }
 
 // NewExecutionHandler creates a new execution handler
 func NewExecutionHandler(engine *execution.Engine) *ExecutionHandler {
 	return &ExecutionHandler{
-		engine: engine,
+		engine:          engine,
+		responseHandler: NewResponseHandler(),
 	}
 }
 
@@ -27,11 +29,7 @@ func (h *ExecutionHandler) ExecuteRule(c *gin.Context) {
 
 	var req domain.ExecutionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, domain.ErrorResponse{
-			Code:    "INVALID_REQUEST",
-			Error:   "Bad Request",
-			Message: "Invalid request body: " + err.Error(),
-		})
+		h.responseHandler.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 
@@ -62,11 +60,7 @@ func (h *ExecutionHandler) ExecuteWorkflow(c *gin.Context) {
 
 	var req domain.ExecutionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, domain.ErrorResponse{
-			Code:    "INVALID_REQUEST",
-			Error:   "Bad Request",
-			Message: "Invalid request body: " + err.Error(),
-		})
+		h.responseHandler.BadRequest(c, "Invalid request body: "+err.Error())
 		return
 	}
 
