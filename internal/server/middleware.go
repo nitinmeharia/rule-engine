@@ -164,6 +164,9 @@ func ContextLoggingMiddleware() gin.HandlerFunc {
 		ctx := context.WithValue(c.Request.Context(), "request_id", requestID)
 		c.Request = c.Request.WithContext(ctx)
 
+		// Add request ID to Gin context
+		c.Set("request_id", requestID)
+
 		// Add request ID to response headers
 		c.Header("X-Request-ID", requestID)
 
