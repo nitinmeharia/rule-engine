@@ -27,6 +27,20 @@ func (s *FieldService) CreateField(ctx context.Context, namespace string, field 
 		return err
 	}
 
+	// Check if namespace exists
+	nsRepo, ok := any(s.repo).(interface {
+		NamespaceExists(ctx context.Context, namespace string) (bool, error)
+	})
+	if ok {
+		exists, err := nsRepo.NamespaceExists(ctx, namespace)
+		if err != nil {
+			return domain.ErrInternalError
+		}
+		if !exists {
+			return domain.ErrNamespaceNotFound
+		}
+	}
+
 	// Check if field already exists
 	exists, err := s.repo.Exists(ctx, namespace, field.FieldID)
 	if err != nil {
