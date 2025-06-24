@@ -23,8 +23,9 @@ Generic Rule Engine is a high-performance, stateless rule evaluation service for
 
 ## Prerequisites
 
-- Go 1.22+
+- Go 1.24+
 - PostgreSQL 15+
+- Docker (optional)
 - make
 
 ---

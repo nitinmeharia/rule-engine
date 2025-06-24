@@ -1,6 +1,6 @@
 # Rule Engine Testing Scripts
 
-[![Go](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org/)
+[![Go](https://img.shields.io/badge/Go-1.24+-blue.svg)](https://golang.org/)
 [![Python](https://img.shields.io/badge/Python-3.8+-green.svg)](https://python.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -30,7 +30,7 @@ This directory contains a comprehensive testing framework for the Rule Engine AP
 ## 🔧 Prerequisites
 
 ### Required Software
-- **Go 1.21+** - For running the API server
+- **Go 1.24+** - For running the API server
 - **Python 3.8+** - For JWT token generation and test utilities
 - **PostgreSQL** - Database server
 - **Make** - For build automation
@@ -300,7 +300,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          go-version: '1.24'
           
       - name: Setup Python
         uses: actions/setup-python@v4
