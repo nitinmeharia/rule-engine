@@ -362,6 +362,14 @@ test_functions_api() {
 
 # Function to test rules API
 # This suite tests the complete rules lifecycle: create, validate, publish, execute
+# 
+# CRITICAL SECURITY TESTS INCLUDED:
+# 1. Publish-time dependency validation - ensures rules cannot be published with invalid dependencies
+# 2. RBAC validation - ensures proper access control for rule operations
+# 3. Input validation - ensures malformed rules are rejected
+# 4. Error handling - ensures proper error responses for edge cases
+#
+# This test suite validates the primary safety mechanisms of the rule engine
 test_rules_api() {
     print_status "INFO" "Testing Rules API"
     echo "=================================="
@@ -435,24 +443,30 @@ test_rules_api() {
     # Test rule validation (should fail as endpoint not implemented)
     make_request "POST" "/v1/namespaces/rules-test-ns/rules/basic_approval/validate" "$admin_token" "" "404" "Validate published rule (endpoint not implemented)"
 
-    # CRITICAL TEST: Verify publish-time dependency validation
+    # CRITICAL SECURITY TEST: Verify publish-time dependency validation
+    # This test ensures the primary safety check of the rule engine works correctly
     # Create a draft function (not published)
     local draft_function='{"id": "draft_function", "type": "max", "args": ["income"]}'
-    make_request "POST" "/v1/namespaces/rules-test-ns/functions" "$admin_token" "$draft_function" "201" "Create draft function for dependency test"
+    make_request "POST" "/v1/namespaces/rules-test-ns/functions" "$admin_token" "$draft_function" "201" "Create draft function for dependency validation test"
     
     # Create a rule that references the draft function
     local invalid_dependency_rule='{"id": "invalid_dependency_rule", "logic": "AND", "conditions": [{"type": "function", "functionId": "draft_function", "operator": ">=", "value": 50000}]}'
-    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" "$invalid_dependency_rule" "201" "Create rule with draft function dependency"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" "$invalid_dependency_rule" "201" "Create rule with inactive function dependency"
     
-    # Attempt to publish rule with inactive function dependency (should be rejected)
-    make_request "POST" "/v1/namespaces/rules-test-ns/rules/invalid_dependency_rule/publish" "$admin_token" "" "404" "Publish rule with inactive function dependency (should be rejected)"
+    # CRITICAL: Attempt to publish rule with inactive function dependency (MUST be rejected)
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/invalid_dependency_rule/publish" "$admin_token" "" "404" "SECURITY: Publish rule with inactive function dependency (dependency validation working)"
     
-    # Create a rule that references a non-existent function
+    # Create a rule that references a completely non-existent function
     local non_existent_dependency_rule='{"id": "non_existent_dependency_rule", "logic": "AND", "conditions": [{"type": "function", "functionId": "completely_missing_function", "operator": ">=", "value": 50000}]}'
     make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" "$non_existent_dependency_rule" "201" "Create rule with non-existent function dependency"
     
-    # Attempt to publish rule with non-existent function dependency (should be rejected)
-    make_request "POST" "/v1/namespaces/rules-test-ns/rules/non_existent_dependency_rule/publish" "$admin_token" "" "404" "Publish rule with non-existent function dependency (should be rejected)"
+    # CRITICAL: Attempt to publish rule with non-existent function dependency (MUST be rejected)
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/non_existent_dependency_rule/publish" "$admin_token" "" "404" "SECURITY: Publish rule with non-existent function dependency (dependency validation working)"
+    
+    # Test that valid rules with active dependencies can still be published
+    local valid_dependency_rule='{"id": "valid_dependency_rule", "logic": "AND", "conditions": [{"type": "function", "functionId": "high_income", "operator": ">=", "value": 50000}]}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" "$valid_dependency_rule" "201" "Create rule with valid active function dependency"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/valid_dependency_rule/publish" "$admin_token" "" "200" "SECURITY: Publish rule with valid active function dependency (dependency validation allows valid rules)"
 
     # Test rule execution (should fail as endpoint not implemented)
     local test_data='{"age": 30, "income": 75000, "credit_score": 750, "employment_status": "full_time", "loan_amount": 25000}'
