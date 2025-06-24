@@ -58,40 +58,13 @@ generate_jwt_token() {
     local role=$2
     local expiry_hours=${3:-24}
     
-    # Create JWT token using conda Python that has PyJWT
-    if [ -x "$PYTHON" ]; then
-        $PYTHON -c "
-import jwt
-import datetime
-
-secret = '$JWT_SECRET'
-client_id = '$client_id'
-role = '$role'
-expiry_hours = $expiry_hours
-
-# Use timezone-aware datetime to avoid deprecation warnings
-now = datetime.datetime.now(datetime.timezone.utc)
-
-claims = {
-    'clientId': client_id,
-    'role': role,
-    'exp': now + datetime.timedelta(hours=expiry_hours),
-    'iat': now,
-    'nbf': now
-}
-
-token = jwt.encode(claims, secret, algorithm='HS256')
-print(token)
-"
+    # Use the external JWT generator script with quiet flag
+    if [ -f "./scripts/generate-jwt.py" ]; then
+        python3 scripts/generate-jwt.py --client-id "$client_id" --role "$role" --expires "$expiry_hours" --quiet
     else
-        # Fallback: use the JWT generator binary if available
-        if [ -f "./bin/jwt-generator" ]; then
-            ./bin/jwt-generator -secret="$JWT_SECRET" -client-id="$client_id" -role="$role" -expiry="${expiry_hours}h" | head -n 1
-        else
-            print_status "WARN" "Conda Python not available and JWT generator not found. Using hardcoded test token."
-            # This is a pre-generated token for testing - replace with actual token generation
-            echo "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjbGllbnRJZCI6InRlc3QtY2xpZW50Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzUwNzM5MjAwMCwiaWF0IjoxNzUwNzM1NjAwMCwibmJmIjoxNzUwNzM1NjAwMH0.test-signature"
-        fi
+        print_status "WARN" "JWT generator script not found. Using hardcoded test token."
+        # This is a pre-generated token for testing - replace with actual token generation
+        echo "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjbGllbnRJZCI6InRlc3QtY2xpZW50Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzUwNzM5MjAwMCwiaWF0IjoxNzUwNzM1NjAwMCwibmJmIjoxNzUwNzM1NjAwMH0.test-signature"
     fi
 }
 
@@ -514,89 +487,29 @@ test_rules_api() {
     make_request "DELETE" "/v1/namespaces/rules-test-ns" "$admin_token" "" "204" "Delete rules test namespace"
 }
 
-# Function to test workflows API
+# Function to test workflows API with comprehensive terminal validation
 test_workflows_api() {
-    print_status "INFO" "Testing Workflows API"
+    print_status "INFO" "Testing Workflows API with Comprehensive Terminal Validation"
     echo "=================================="
-    local admin_token=$(generate_jwt_token "$CLIENT_ID" "$ADMIN_ROLE")
-    local viewer_token=$(generate_jwt_token "$CLIENT_ID" "$VIEWER_ROLE")
-    local executor_token=$(generate_jwt_token "$CLIENT_ID" "$EXECUTOR_ROLE")
-
-    # Create a namespace for workflows
-    local ns_data='{"id": "workflows-test-ns", "description": "Namespace for comprehensive workflows testing"}'
-    make_request "POST" "/v1/namespaces" "$admin_token" "$ns_data" "201" "Create workflows test namespace"
-
-    # Create fields, functions, and terminals as dependencies
-    local field_a='{"fieldId": "input_a", "type": "number", "description": "Input A"}'
-    local field_b='{"fieldId": "input_b", "type": "number", "description": "Input B"}'
-    make_request "POST" "/v1/namespaces/workflows-test-ns/fields" "$admin_token" "$field_a" "201" "Create field: input_a"
-    make_request "POST" "/v1/namespaces/workflows-test-ns/fields" "$admin_token" "$field_b" "201" "Create field: input_b"
-
-    local fn_sum='{"id": "sum_fn", "type": "sum", "args": ["input_a", "input_b"]}'
-    make_request "POST" "/v1/namespaces/workflows-test-ns/functions" "$admin_token" "$fn_sum" "201" "Create function: sum_fn"
-    make_request "POST" "/v1/namespaces/workflows-test-ns/functions/sum_fn/publish" "$admin_token" "" "200" "Publish function: sum_fn"
-
-    local terminal_approve='{"terminalId": "approve"}'
-    make_request "POST" "/v1/namespaces/workflows-test-ns/terminals" "$admin_token" "$terminal_approve" "201" "Create terminal: approve"
-
-    # Create a workflow (draft)
-    local steps='{"step1": {"type": "function", "functionId": "sum_fn", "next": "step2"}, "step2": {"type": "terminal", "terminalId": "approve"}}'
-    local workflow_data='{"workflowId": "wf1", "startAt": "step1", "steps": '"$steps"'}'
-    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows" "$admin_token" "$workflow_data" "201" "Create workflow (draft)"
-
-    # Retrieve workflow (should return draft)
-    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows/wf1" "$admin_token" "" "200" "Get workflow (draft)"
-
-    # List workflows
-    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows" "$admin_token" "" "200" "List workflows"
-
-    # Update workflow draft
-    local updated_steps='{"step1": {"type": "function", "functionId": "sum_fn", "next": "step2"}, "step2": {"type": "terminal", "terminalId": "approve"}}'
-    local update_data='{"steps": '"$updated_steps"'}'
-    make_request "PUT" "/v1/namespaces/workflows-test-ns/workflows/wf1/versions/draft" "$admin_token" "$update_data" "200" "Update workflow draft"
-
-    # Publish workflow
-    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows/wf1/versions/1/publish" "$admin_token" "" "200" "Publish workflow"
-
-    # Retrieve workflow (should return active)
-    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows/wf1" "$admin_token" "" "200" "Get workflow (active)"
-
-    # List workflow versions
-    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows/wf1/versions" "$admin_token" "" "200" "List workflow versions"
-
-    # Test cyclic dependency (should fail)
-    local cyclic_steps='{"step1": {"type": "function", "functionId": "sum_fn", "next": "step2"}, "step2": {"type": "function", "functionId": "sum_fn", "next": "step1"}}'
-    local cyclic_workflow='{"workflowId": "cyclic-wf", "startAt": "step1", "steps": '"$cyclic_steps"'}'
-    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows" "$admin_token" "$cyclic_workflow" "400" "Create workflow with cyclic dependency (should fail)"
-
-    # Test duplicate workflow creation (should fail)
-    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows" "$admin_token" "$workflow_data" "409" "Create duplicate workflow (should fail)"
-
-    # Test invalid workflow (missing startAt)
-    local invalid_workflow='{"workflowId": "invalid-wf", "steps": '"$steps"'}'
-    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows" "$admin_token" "$invalid_workflow" "400" "Create workflow with missing startAt (should fail)"
-
-    # Test get non-existent workflow
-    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows/non-existent" "$admin_token" "" "404" "Get non-existent workflow"
-
-    # Test RBAC: viewer cannot create workflow
-    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows" "$viewer_token" "$workflow_data" "403" "Viewer cannot create workflow"
-
-    # Test RBAC: viewer can list and get workflows
-    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows" "$viewer_token" "" "200" "Viewer can list workflows"
-    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows/wf1" "$viewer_token" "" "200" "Viewer can get workflow"
-
-    # Test RBAC: executor cannot create workflow
-    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows" "$executor_token" "$workflow_data" "403" "Executor cannot create workflow"
-
-    # Test delete workflow
-    make_request "DELETE" "/v1/namespaces/workflows-test-ns/workflows/wf1/versions/1" "$admin_token" "" "204" "Delete workflow version 1"
-
-    # Test delete non-existent workflow
-    make_request "DELETE" "/v1/namespaces/workflows-test-ns/workflows/non-existent/versions/1" "$admin_token" "" "404" "Delete non-existent workflow"
-
-    # Clean up
-    make_request "DELETE" "/v1/namespaces/workflows-test-ns" "$admin_token" "" "204" "Delete workflows test namespace"
+    
+    # Run the enhanced workflow test script that includes terminal validation
+    print_status "INFO" "Running comprehensive workflow tests with terminal validation..."
+    
+    if [ -f "./scripts/test-workflows-api.sh" ]; then
+        # Run the enhanced workflow test script
+        bash ./scripts/test-workflows-api.sh
+        
+        # Check the exit code
+        if [ $? -eq 0 ]; then
+            print_status "PASS" "Comprehensive workflow tests with terminal validation completed successfully"
+        else
+            print_status "FAIL" "Comprehensive workflow tests with terminal validation failed"
+        fi
+    else
+        print_status "FAIL" "Enhanced workflow test script not found: ./scripts/test-workflows-api.sh"
+    fi
+    
+    echo ""
 }
 
 # Function to test terminals API

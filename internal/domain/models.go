@@ -245,6 +245,7 @@ func (w *Workflow) Validate() error {
 }
 
 // validateWorkflowSteps validates that the workflow steps don't contain cyclic dependencies
+// and ensures all paths eventually lead to terminal steps
 func (w *Workflow) validateWorkflowSteps() error {
 	if w.Steps == nil {
 		return nil
@@ -295,26 +296,98 @@ func (w *Workflow) validateWorkflowSteps() error {
 		}
 	}
 
+	// Validate that all paths lead to terminals
+	if err := w.validateAllPathsLeadToTerminals(steps, adjacencyList); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-// hasCycle performs DFS to detect cycles in the workflow graph
-func hasCycle(stepName string, adjacencyList map[string][]string, visited, recStack map[string]bool) bool {
-	visited[stepName] = true
-	recStack[stepName] = true
+// validateAllPathsLeadToTerminals ensures that every possible path in the workflow
+// eventually reaches a terminal step, and reports errors at the highest actionable level
+func (w *Workflow) validateAllPathsLeadToTerminals(steps map[string]interface{}, adjacencyList map[string][]string) error {
+	leadsToTerminal := make(map[string]bool)
 
-	for _, neighbor := range adjacencyList[stepName] {
-		if !visited[neighbor] {
-			if hasCycle(neighbor, adjacencyList, visited, recStack) {
-				return true
-			}
-		} else if recStack[neighbor] {
-			return true
+	// Mark all terminal steps as leading to terminals
+	for stepName, stepData := range steps {
+		stepMap, ok := stepData.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		stepType, _ := stepMap["type"].(string)
+		if stepType == "terminal" {
+			leadsToTerminal[stepName] = true
 		}
 	}
 
-	recStack[stepName] = false
-	return false
+	// Recursively validate all steps lead to terminals, starting from startAt
+	if err := w.stepLeadsToTerminalHighLevel(w.StartAt, steps, adjacencyList, leadsToTerminal, make(map[string]bool)); err != nil {
+		return err
+	}
+	return nil
+}
+
+// stepLeadsToTerminalHighLevel checks if a step leads to a terminal, and if not, returns an actionable error at the highest branch
+func (w *Workflow) stepLeadsToTerminalHighLevel(stepName string, steps map[string]interface{}, adjacencyList map[string][]string, leadsToTerminal map[string]bool, visiting map[string]bool) error {
+	// Already validated
+	if result, exists := leadsToTerminal[stepName]; exists && result {
+		return nil
+	}
+	if visiting[stepName] {
+		return nil // cycle detection is handled elsewhere
+	}
+	visiting[stepName] = true
+	defer func() { visiting[stepName] = false }()
+
+	stepData, exists := steps[stepName]
+	if !exists {
+		return w.validationBranchError(stepName, "(unknown)")
+	}
+	stepMap, ok := stepData.(map[string]interface{})
+	if !ok {
+		return w.validationBranchError(stepName, "(malformed)")
+	}
+	stepType, _ := stepMap["type"].(string)
+
+	if stepType == "terminal" {
+		leadsToTerminal[stepName] = true
+		return nil
+	}
+
+	if stepType == "rule" {
+		onTrue, hasOnTrue := stepMap["onTrue"].(string)
+		onFalse, hasOnFalse := stepMap["onFalse"].(string)
+		if !hasOnTrue {
+			return w.validationBranchError(stepName, "onTrue")
+		}
+		if !hasOnFalse {
+			return w.validationBranchError(stepName, "onFalse")
+		}
+
+		// Check onTrue branch
+		errTrue := w.stepLeadsToTerminalHighLevel(onTrue, steps, adjacencyList, leadsToTerminal, visiting)
+		if errTrue != nil {
+			return w.validationBranchError(stepName, "onTrue")
+		}
+		// Check onFalse branch
+		errFalse := w.stepLeadsToTerminalHighLevel(onFalse, steps, adjacencyList, leadsToTerminal, visiting)
+		if errFalse != nil {
+			return w.validationBranchError(stepName, "onFalse")
+		}
+		leadsToTerminal[stepName] = true
+		return nil
+	}
+
+	return w.validationBranchError(stepName, "(unknown type)")
+}
+
+// validationBranchError returns a precise, actionable error message for a failed branch
+func (w *Workflow) validationBranchError(stepName, branch string) error {
+	if branch == "(unknown)" || branch == "(malformed)" || branch == "(unknown type)" {
+		return fmt.Errorf("Validation Error: Step '%s' is invalid or missing and does not lead to a terminal.", stepName)
+	}
+	return fmt.Errorf("Validation Error: The '%s' path for step '%s' does not lead to a terminal.", branch, stepName)
 }
 
 // Terminal represents a terminal node in workflows
@@ -455,3 +528,22 @@ const (
 	FunctionReturnTypeNumber = "number"
 	FunctionReturnTypeBool   = "bool"
 )
+
+// hasCycle performs DFS to detect cycles in the workflow graph
+func hasCycle(stepName string, adjacencyList map[string][]string, visited, recStack map[string]bool) bool {
+	visited[stepName] = true
+	recStack[stepName] = true
+
+	for _, neighbor := range adjacencyList[stepName] {
+		if !visited[neighbor] {
+			if hasCycle(neighbor, adjacencyList, visited, recStack) {
+				return true
+			}
+		} else if recStack[neighbor] {
+			return true
+		}
+	}
+
+	recStack[stepName] = false
+	return false
+}

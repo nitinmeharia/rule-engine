@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -27,26 +26,20 @@ func NewWorkflowHandler(workflowService service.WorkflowServiceInterface) *Workf
 // CreateWorkflow handles POST /v1/namespaces/{namespace}/workflows
 func (h *WorkflowHandler) CreateWorkflow(c *gin.Context) {
 	namespace := c.Param("id")
-	fmt.Printf("[DEBUG] CreateWorkflow called. Namespace: %s\n", namespace)
 	if namespace == "" {
-		fmt.Printf("[ERROR] Namespace is required\n")
 		h.responseHandler.BadRequest(c, "Namespace is required")
 		return
 	}
 
 	var req domain.CreateWorkflowRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		fmt.Printf("[ERROR] Invalid request body: %v\n", err)
 		h.responseHandler.BadRequest(c, "Invalid request body")
 		return
 	}
 
-	fmt.Printf("[DEBUG] CreateWorkflow request: %+v\n", req)
-
 	// Get client ID from context
 	clientID, exists := c.Get("client_id")
 	if !exists || clientID == nil {
-		fmt.Printf("[ERROR] Client ID not found in context\n")
 		h.responseHandler.Unauthorized(c, "Client ID not found")
 		return
 	}
@@ -61,12 +54,9 @@ func (h *WorkflowHandler) CreateWorkflow(c *gin.Context) {
 
 	err := h.workflowService.Create(c.Request.Context(), workflow)
 	if err != nil {
-		fmt.Printf("[ERROR] workflowService.Create error: %v\n", err)
 		h.responseHandler.MapDomainErrorToResponse(c, err)
 		return
 	}
-
-	fmt.Printf("[DEBUG] Workflow created successfully: %+v\n", workflow)
 
 	response := h.responseHandler.ConvertWorkflowToResponse(workflow)
 	h.responseHandler.Created(c, response)

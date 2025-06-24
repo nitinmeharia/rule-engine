@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -87,29 +86,38 @@ func (h *ResponseHandler) MapDomainErrorToResponse(c *gin.Context, err error) {
 		return
 	}
 
-	// Debug logging to see what error we're getting
-	fmt.Printf("[DEBUG] MapDomainErrorToResponse called with error: %v\n", err)
-	fmt.Printf("[DEBUG] Error type: %T\n", err)
-
 	// Check if it's a domain APIError
 	if apiErr, ok := err.(*domain.APIError); ok {
-		fmt.Printf("[DEBUG] Found domain APIError: %+v\n", apiErr)
 		c.JSON(apiErr.HTTPStatus(), apiErr)
 		return
 	}
 
-	// Recursively unwrap and check error messages for dependency validation
+	// Recursively unwrap and check error messages for validation and dependency errors
 	unwrapErr := err
 	for unwrapErr != nil {
 		errMsg := unwrapErr.Error()
-		fmt.Printf("[DEBUG] Checking error message: %s\n", errMsg)
+
+		// Check for validation errors first (highest priority)
+		if strings.Contains(errMsg, "Validation Error") ||
+			strings.Contains(errMsg, "validation error") ||
+			strings.Contains(errMsg, "invalid") ||
+			strings.Contains(errMsg, "missing") ||
+			strings.Contains(errMsg, "required") {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"code":    "VALIDATION_ERROR",
+				"error":   "BAD_REQUEST",
+				"message": errMsg,
+			})
+			return
+		}
+
+		// Check for dependency validation errors
 		if strings.Contains(errMsg, "not found") ||
 			strings.Contains(errMsg, "is not active") ||
 			strings.Contains(errMsg, "invalid dependency") ||
 			strings.Contains(errMsg, "dependency") ||
 			strings.Contains(errMsg, "no rows in result set") ||
 			strings.Contains(errMsg, "cyclic dependency") {
-			fmt.Printf("[DEBUG] Found dependency validation error, returning 400\n")
 			c.JSON(http.StatusBadRequest, gin.H{
 				"code":    "VALIDATION_ERROR",
 				"error":   "BAD_REQUEST",
@@ -121,7 +129,6 @@ func (h *ResponseHandler) MapDomainErrorToResponse(c *gin.Context, err error) {
 	}
 
 	// Default to internal server error
-	fmt.Printf("[DEBUG] No specific error mapping found, returning 500\n")
 	c.JSON(http.StatusInternalServerError, gin.H{
 		"code":    "INTERNAL_SERVER_ERROR",
 		"error":   "INTERNAL_SERVER_ERROR",

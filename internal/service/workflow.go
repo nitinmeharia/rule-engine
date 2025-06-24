@@ -45,46 +45,40 @@ func NewWorkflowService(
 
 // Create creates a new workflow
 func (s *WorkflowService) Create(ctx context.Context, workflow *domain.Workflow) error {
-	fmt.Printf("[DEBUG] WorkflowService.Create called. Workflow: %+v\n", workflow)
 	// Validate the workflow
 	if err := workflow.Validate(); err != nil {
-		fmt.Printf("[ERROR] Workflow validation failed: %v\n", err)
-		return err
+		// Wrap validation errors in domain.APIError to ensure proper HTTP 400 responses
+		if _, ok := err.(*domain.APIError); ok {
+			return err // already wrapped
+		}
+		return domain.NewAPIError(domain.ErrCodeValidationError, err.Error())
 	}
 
 	// Check if workflow already exists (draft or active)
 	draftExists, err := s.workflowRepo.GetDraftVersion(ctx, workflow.Namespace, workflow.WorkflowID)
 	if err == nil && draftExists != nil {
-		fmt.Printf("[ERROR] Workflow draft already exists: %s\n", workflow.WorkflowID)
 		return domain.ErrWorkflowAlreadyExists
 	}
 
 	activeExists, err := s.workflowRepo.GetActiveVersion(ctx, workflow.Namespace, workflow.WorkflowID)
 	if err == nil && activeExists != nil {
-		fmt.Printf("[ERROR] Workflow active version already exists: %s\n", workflow.WorkflowID)
 		return domain.ErrWorkflowAlreadyExists
 	}
 
 	// Get next version number
 	maxVersion, err := s.workflowRepo.GetMaxVersion(ctx, workflow.Namespace, workflow.WorkflowID)
 	if err != nil {
-		fmt.Printf("[ERROR] Failed to get max version: %v\n", err)
 		return fmt.Errorf("failed to get max version: %w", err)
 	}
-	fmt.Printf("[DEBUG] Max version for workflow %s: %d\n", workflow.WorkflowID, maxVersion)
 
 	// Set workflow properties
 	workflow.Version = maxVersion + 1
 	workflow.Status = domain.StatusDraft
-	fmt.Printf("[DEBUG] Setting workflow version to: %d\n", workflow.Version)
 
-	fmt.Printf("[DEBUG] Creating workflow in repo: %+v\n", workflow)
 	err = s.workflowRepo.Create(ctx, workflow)
 	if err != nil {
-		fmt.Printf("[ERROR] Failed to create workflow in repo: %v\n", err)
 		return err
 	}
-	fmt.Printf("[DEBUG] Workflow created successfully in repo\n")
 	return nil
 }
 
@@ -122,7 +116,11 @@ func (s *WorkflowService) ListVersions(ctx context.Context, namespace, workflowI
 func (s *WorkflowService) Update(ctx context.Context, workflow *domain.Workflow) error {
 	// Validate the workflow
 	if err := workflow.Validate(); err != nil {
-		return err
+		// Wrap validation errors in domain.APIError to ensure proper HTTP 400 responses
+		if _, ok := err.(*domain.APIError); ok {
+			return err // already wrapped
+		}
+		return domain.NewAPIError(domain.ErrCodeValidationError, err.Error())
 	}
 
 	// Check if workflow exists
@@ -204,7 +202,8 @@ func (s *WorkflowService) validateDependencies(ctx context.Context, workflow *do
 	// Parse workflow steps from JSON
 	var steps map[string]interface{}
 	if err := json.Unmarshal(workflow.Steps, &steps); err != nil {
-		return fmt.Errorf("invalid workflow steps format: %w", err)
+		// Wrap JSON unmarshaling errors in domain.APIError to ensure proper HTTP 400 responses
+		return domain.NewAPIError(domain.ErrCodeValidationError, fmt.Sprintf("invalid workflow steps format: %v", err))
 	}
 
 	// Extract all rule and terminal references from workflow steps
@@ -239,13 +238,13 @@ func (s *WorkflowService) validateDependencies(ctx context.Context, workflow *do
 		rule, err := s.ruleRepo.GetActiveVersion(ctx, workflow.Namespace, ruleID)
 		if err != nil {
 			if err == domain.ErrRuleNotFound {
-				return fmt.Errorf("rule '%s' not found", ruleID)
+				return domain.NewAPIError(domain.ErrCodeDependencyInactive, fmt.Sprintf("rule '%s' not found", ruleID))
 			}
 			return fmt.Errorf("failed to validate rule '%s': %w", ruleID, err)
 		}
 
 		if rule.Status != domain.StatusActive {
-			return fmt.Errorf("rule '%s' is not active (status: %s)", ruleID, rule.Status)
+			return domain.NewAPIError(domain.ErrCodeDependencyInactive, fmt.Sprintf("rule '%s' is not active (status: %s)", ruleID, rule.Status))
 		}
 	}
 
@@ -254,7 +253,7 @@ func (s *WorkflowService) validateDependencies(ctx context.Context, workflow *do
 		_, err := s.terminalRepo.GetByID(ctx, workflow.Namespace, terminalID)
 		if err != nil {
 			if err == domain.ErrTerminalNotFound {
-				return fmt.Errorf("terminal '%s' not found", terminalID)
+				return domain.NewAPIError(domain.ErrCodeDependencyInactive, fmt.Sprintf("terminal '%s' not found", terminalID))
 			}
 			return fmt.Errorf("failed to validate terminal '%s': %w", terminalID, err)
 		}

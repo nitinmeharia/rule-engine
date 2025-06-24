@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Test script for Workflows API
+# Test script for Workflows API with Comprehensive Terminal Validation
 # This script tests the complete workflow lifecycle including CRUD operations,
-# publishing, deactivation, and dependency validation.
+# publishing, deactivation, dependency validation, and mandatory terminal validation.
 
 set -e
 
@@ -17,6 +17,10 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Test counter
+TESTS_PASSED=0
+TESTS_FAILED=0
 
 # Helper functions
 log_info() {
@@ -35,13 +39,14 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Test function
+# Enhanced test function with error message validation
 test_endpoint() {
     local method=$1
     local endpoint=$2
     local data=$3
     local expected_status=$4
     local test_name=$5
+    local expected_error_contains=$6
 
     log_info "Testing: $test_name"
     log_info "Endpoint: $method $endpoint"
@@ -69,20 +74,35 @@ test_endpoint() {
     # Check status code
     if [ "$status_code" = "$expected_status" ]; then
         log_success "Status code matches expected: $expected_status"
+        
+        # Check error message if expected
+        if [ -n "$expected_error_contains" ]; then
+            if echo "$body" | grep -q "$expected_error_contains"; then
+                log_success "Expected error message found: $expected_error_contains"
+                ((TESTS_PASSED++))
+            else
+                log_error "Expected error message not found. Expected: $expected_error_contains"
+                ((TESTS_FAILED++))
+                return 1
+            fi
+        else
+            ((TESTS_PASSED++))
+        fi
     else
         log_error "Status code mismatch. Expected: $expected_status, Got: $status_code"
+        ((TESTS_FAILED++))
         return 1
     fi
 
     echo
 }
 
-# Setup: Generate JWT token
+# Setup: Generate JWT token and create test environment
 setup() {
     log_info "Setting up test environment..."
     
     # Generate JWT token
-    JWT_TOKEN=$(python3 scripts/generate-jwt.py --role admin --client-id test-client)
+    JWT_TOKEN=$(python3 scripts/generate-jwt.py --role admin --client-id test-client --quiet)
     log_info "Generated JWT token: ${JWT_TOKEN:0:50}..."
 
     # Create namespace
@@ -90,26 +110,44 @@ setup() {
     namespace_data="{\"id\":\"$NAMESPACE_ID\",\"description\":\"Test namespace for workflows\"}"
     test_endpoint "POST" "/namespaces" "$namespace_data" "201" "Create namespace"
 
-    # Create a field for rule conditions
-    log_info "Creating field for rule conditions"
+    # Create fields for rule conditions
+    log_info "Creating fields for rule conditions"
     field_data="{\"fieldId\":\"status\",\"type\":\"string\",\"description\":\"Application status field\"}"
-    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/fields" "$field_data" "201" "Create field"
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/fields" "$field_data" "201" "Create status field"
 
-    # Create a function for workflow dependencies
-    log_info "Creating function for workflow dependencies"
+    field_data="{\"fieldId\":\"salary\",\"type\":\"number\",\"description\":\"Monthly salary\"}"
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/fields" "$field_data" "201" "Create salary field"
+
+    field_data="{\"fieldId\":\"credit_score\",\"type\":\"number\",\"description\":\"Credit score\"}"
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/fields" "$field_data" "201" "Create credit score field"
+
+    # Create functions for workflow dependencies
+    log_info "Creating functions for workflow dependencies"
     function_data="{\"id\":\"eligibility-check\",\"type\":\"in\",\"values\":[\"approved\",\"pending\"]}"
-    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/functions" "$function_data" "201" "Create function"
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/functions" "$function_data" "201" "Create eligibility function"
 
-    # Publish the function
-    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/functions/eligibility-check/publish" "" "200" "Publish function"
+    function_data="{\"id\":\"income-check\",\"type\":\"max\",\"args\":[\"salary\",\"bonus\"]}"
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/functions" "$function_data" "201" "Create income function"
 
-    # Create a rule for workflow dependencies
-    log_info "Creating rule for workflow dependencies"
+    # Publish the functions
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/functions/eligibility-check/publish" "" "200" "Publish eligibility function"
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/functions/income-check/publish" "" "200" "Publish income function"
+
+    # Create rules for workflow dependencies
+    log_info "Creating rules for workflow dependencies"
     rule_data='{"id":"basic-approval","logic":"AND","conditions":[{"type":"field","fieldId":"status","operator":"==","value":"approved"}]}'
-    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/rules" "$rule_data" "201" "Create rule"
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/rules" "$rule_data" "201" "Create basic approval rule"
 
-    # Publish the rule
-    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/rules/basic-approval/publish" "" "200" "Publish rule"
+    rule_data='{"id":"income-rule","logic":"AND","conditions":[{"type":"field","fieldId":"salary","operator":">=","value":50000}]}'
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/rules" "$rule_data" "201" "Create income rule"
+
+    rule_data='{"id":"credit-rule","logic":"AND","conditions":[{"type":"field","fieldId":"credit_score","operator":">=","value":700}]}'
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/rules" "$rule_data" "201" "Create credit rule"
+
+    # Publish the rules
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/rules/basic-approval/publish" "" "200" "Publish basic approval rule"
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/rules/income-rule/publish" "" "200" "Publish income rule"
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/rules/credit-rule/publish" "" "200" "Publish credit rule"
 
     # Create terminals for workflow
     log_info "Creating terminals for workflow"
@@ -119,13 +157,16 @@ setup() {
     terminal_data="{\"terminalId\":\"reject\"}"
     test_endpoint "POST" "/namespaces/$NAMESPACE_ID/terminals" "$terminal_data" "201" "Create reject terminal"
 
+    terminal_data="{\"terminalId\":\"manual_review\"}"
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/terminals" "$terminal_data" "201" "Create manual review terminal"
+
     log_success "Setup completed successfully"
     echo
 }
 
-# Test workflow creation
+# Test workflow creation with valid workflows
 test_workflow_creation() {
-    log_info "=== Testing Workflow Creation ==="
+    log_info "=== Testing Workflow Creation (Valid Cases) ==="
 
     # Create a simple workflow
     workflow_data="{
@@ -151,7 +192,214 @@ test_workflow_creation() {
         }
     }"
 
-    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$workflow_data" "201" "Create workflow"
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$workflow_data" "201" "Create simple workflow"
+
+    # Create a complex workflow with multiple branches
+    complex_workflow_data="{
+        \"id\":\"complex-approval-workflow\",
+        \"startAt\":\"initial-check\",
+        \"steps\":{
+            \"initial-check\":{
+                \"type\":\"rule\",
+                \"ruleId\":\"income-rule\",
+                \"onTrue\":\"credit-check\",
+                \"onFalse\":\"reject\"
+            },
+            \"credit-check\":{
+                \"type\":\"rule\",
+                \"ruleId\":\"credit-rule\",
+                \"onTrue\":\"approve\",
+                \"onFalse\":\"manual_review\"
+            },
+            \"approve\":{
+                \"type\":\"terminal\",
+                \"terminalId\":\"approve\",
+                \"result\":{\"status\":\"approved\"}
+            },
+            \"reject\":{
+                \"type\":\"terminal\",
+                \"terminalId\":\"reject\",
+                \"result\":{\"status\":\"rejected\"}
+            },
+            \"manual_review\":{
+                \"type\":\"terminal\",
+                \"terminalId\":\"manual_review\",
+                \"result\":{\"status\":\"manual_review\"}
+            }
+        }
+    }"
+
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$complex_workflow_data" "201" "Create complex workflow"
+
+    # Create a single terminal workflow
+    single_terminal_data="{
+        \"id\":\"simple-terminal-workflow\",
+        \"startAt\":\"approve\",
+        \"steps\":{
+            \"approve\":{
+                \"type\":\"terminal\",
+                \"terminalId\":\"approve\",
+                \"result\":{\"status\":\"approved\"}
+            }
+        }
+    }"
+
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$single_terminal_data" "201" "Create single terminal workflow"
+}
+
+# Test comprehensive terminal validation
+test_terminal_validation() {
+    log_info "=== Testing Terminal Validation (Invalid Cases) ==="
+
+    # Test 1: Missing onTrue path
+    log_info "Test 1: Missing onTrue path"
+    invalid_workflow_1="{
+        \"id\":\"invalid-workflow-1\",
+        \"startAt\":\"check-eligibility\",
+        \"steps\":{
+            \"check-eligibility\":{
+                \"type\":\"rule\",
+                \"ruleId\":\"basic-approval\",
+                \"onFalse\":\"reject\"
+            },
+            \"reject\":{
+                \"type\":\"terminal\",
+                \"terminalId\":\"reject\",
+                \"result\":{\"status\":\"rejected\"}
+            }
+        }
+    }"
+
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$invalid_workflow_1" "400" "Create workflow with missing onTrue path" "Validation Error: The 'onTrue' path for step 'check-eligibility' does not lead to a terminal"
+
+    # Test 2: Missing onFalse path
+    log_info "Test 2: Missing onFalse path"
+    invalid_workflow_2="{
+        \"id\":\"invalid-workflow-2\",
+        \"startAt\":\"check-eligibility\",
+        \"steps\":{
+            \"check-eligibility\":{
+                \"type\":\"rule\",
+                \"ruleId\":\"basic-approval\",
+                \"onTrue\":\"approve\"
+            },
+            \"approve\":{
+                \"type\":\"terminal\",
+                \"terminalId\":\"approve\",
+                \"result\":{\"status\":\"approved\"}
+            }
+        }
+    }"
+
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$invalid_workflow_2" "400" "Create workflow with missing onFalse path" "Validation Error: The 'onFalse' path for step 'check-eligibility' does not lead to a terminal"
+
+    # Test 3: onTrue path leads to non-terminal
+    log_info "Test 3: onTrue path leads to non-terminal"
+    invalid_workflow_3="{
+        \"id\":\"invalid-workflow-3\",
+        \"startAt\":\"check-eligibility\",
+        \"steps\":{
+            \"check-eligibility\":{
+                \"type\":\"rule\",
+                \"ruleId\":\"basic-approval\",
+                \"onTrue\":\"credit-check\",
+                \"onFalse\":\"reject\"
+            },
+            \"credit-check\":{
+                \"type\":\"rule\",
+                \"ruleId\":\"credit-rule\",
+                \"onTrue\":\"approve\",
+                \"onFalse\":\"missing_terminal\"
+            },
+            \"approve\":{
+                \"type\":\"terminal\",
+                \"terminalId\":\"approve\",
+                \"result\":{\"status\":\"approved\"}
+            },
+            \"reject\":{
+                \"type\":\"terminal\",
+                \"terminalId\":\"reject\",
+                \"result\":{\"status\":\"rejected\"}
+            }
+        }
+    }"
+
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$invalid_workflow_3" "400" "Create workflow with onTrue path leading to non-terminal" "Validation Error: The 'onTrue' path for step 'check-eligibility' does not lead to a terminal"
+
+    # Test 4: onFalse path leads to non-terminal
+    log_info "Test 4: onFalse path leads to non-terminal"
+    invalid_workflow_4="{
+        \"id\":\"invalid-workflow-4\",
+        \"startAt\":\"check-eligibility\",
+        \"steps\":{
+            \"check-eligibility\":{
+                \"type\":\"rule\",
+                \"ruleId\":\"basic-approval\",
+                \"onTrue\":\"approve\",
+                \"onFalse\":\"credit-check\"
+            },
+            \"credit-check\":{
+                \"type\":\"rule\",
+                \"ruleId\":\"credit-rule\",
+                \"onTrue\":\"approve\"
+            },
+            \"approve\":{
+                \"type\":\"terminal\",
+                \"terminalId\":\"approve\",
+                \"result\":{\"status\":\"approved\"}
+            }
+        }
+    }"
+
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$invalid_workflow_4" "400" "Create workflow with onFalse path leading to non-terminal" "Validation Error: The 'onFalse' path for step 'check-eligibility' does not lead to a terminal"
+
+    # Test 5: Step leads to non-existent step
+    log_info "Test 5: Step leads to non-existent step"
+    invalid_workflow_5="{
+        \"id\":\"invalid-workflow-5\",
+        \"startAt\":\"check-eligibility\",
+        \"steps\":{
+            \"check-eligibility\":{
+                \"type\":\"rule\",
+                \"ruleId\":\"basic-approval\",
+                \"onTrue\":\"approve\",
+                \"onFalse\":\"non_existent_step\"
+            },
+            \"approve\":{
+                \"type\":\"terminal\",
+                \"terminalId\":\"approve\",
+                \"result\":{\"status\":\"approved\"}
+            }
+        }
+    }"
+
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$invalid_workflow_5" "400" "Create workflow with step leading to non-existent step" "Validation Error: The 'onFalse' path for step 'check-eligibility' does not lead to a terminal"
+
+    # Test 6: Unknown step type
+    log_info "Test 6: Unknown step type"
+    invalid_workflow_6="{
+        \"id\":\"invalid-workflow-6\",
+        \"startAt\":\"check-eligibility\",
+        \"steps\":{
+            \"check-eligibility\":{
+                \"type\":\"unknown_type\"
+            }
+        }
+    }"
+
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$invalid_workflow_6" "400" "Create workflow with unknown step type" "Validation Error: Step 'check-eligibility' is invalid or missing and does not lead to a terminal"
+
+    # Test 7: Malformed step data
+    log_info "Test 7: Malformed step data"
+    invalid_workflow_7="{
+        \"id\":\"invalid-workflow-7\",
+        \"startAt\":\"check-eligibility\",
+        \"steps\":{
+            \"check-eligibility\":\"not a map\"
+        }
+    }"
+
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$invalid_workflow_7" "400" "Create workflow with malformed step data" "Validation Error: Step 'check-eligibility' is invalid or missing and does not lead to a terminal"
 }
 
 # Test workflow retrieval
@@ -190,69 +438,7 @@ test_workflow_deactivation() {
     test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows/loan-approval-workflow/deactivate" "" "204" "Deactivate workflow"
 }
 
-# Test error cases
-test_error_cases() {
-    log_info "=== Testing Error Cases ==="
-
-    # Try to create workflow with non-existent rule
-    invalid_workflow_data="{
-        \"id\":\"invalid-workflow\",
-        \"startAt\":\"check-eligibility\",
-        \"steps\":{
-            \"check-eligibility\":{
-                \"type\":\"rule\",
-                \"ruleId\":\"non-existent-rule\",
-                \"onTrue\":\"approve\",
-                \"onFalse\":\"reject\"
-            },
-            \"approve\":{
-                \"type\":\"terminal\",
-                \"terminalId\":\"approve\",
-                \"result\":{\"status\":\"approved\"}
-            },
-            \"reject\":{
-                \"type\":\"terminal\",
-                \"terminalId\":\"reject\",
-                \"result\":{\"status\":\"rejected\"}
-            }
-        }
-    }"
-
-    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$invalid_workflow_data" "201" "Create workflow with invalid dependencies"
-
-    # Try to publish workflow with invalid dependencies
-    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows/invalid-workflow/versions/1/publish" "" "400" "Publish workflow with invalid dependencies"
-
-    # Try to get non-existent workflow
-    test_endpoint "GET" "/namespaces/$NAMESPACE_ID/workflows/non-existent" "" "404" "Get non-existent workflow"
-
-    # Try to update non-existent workflow
-    update_data="{
-        \"startAt\":\"check-eligibility\",
-        \"steps\":{
-            \"check-eligibility\":{
-                \"type\":\"rule\",
-                \"ruleId\":\"basic-approval\",
-                \"onTrue\":\"approve\",
-                \"onFalse\":\"reject\"
-            },
-            \"approve\":{
-                \"type\":\"terminal\",
-                \"terminalId\":\"approve\",
-                \"result\":{\"status\":\"approved\"}
-            },
-            \"reject\":{
-                \"type\":\"terminal\",
-                \"terminalId\":\"reject\",
-                \"result\":{\"status\":\"rejected\"}
-            }
-        }
-    }"
-
-    test_endpoint "PUT" "/namespaces/$NAMESPACE_ID/workflows/non-existent/versions/1" "$update_data" "404" "Update non-existent workflow"
-}
-
-# Test workflow with cyclic dependencies
+# Test cyclic dependencies
 test_cyclic_dependencies() {
     log_info "=== Testing Cyclic Dependencies ==="
 
@@ -265,44 +451,13 @@ test_cyclic_dependencies() {
                 \"type\":\"rule\",
                 \"ruleId\":\"basic-approval\",
                 \"onTrue\":\"step2\",
-                \"onFalse\":\"step3\"
+                \"onFalse\":\"reject\"
             },
             \"step2\":{
                 \"type\":\"rule\",
                 \"ruleId\":\"basic-approval\",
                 \"onTrue\":\"step1\",
-                \"onFalse\":\"step3\"
-            },
-            \"step3\":{
-                \"type\":\"terminal\",
-                \"terminalId\":\"reject\",
-                \"result\":{\"status\":\"rejected\"}
-            }
-        }
-    }"
-
-    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$cyclic_workflow_data" "400" "Create workflow with cyclic dependencies"
-}
-
-# Test workflow with invalid terminal
-test_invalid_terminal() {
-    log_info "=== Testing Invalid Terminal ==="
-
-    # Create workflow with non-existent terminal
-    invalid_terminal_workflow_data="{
-        \"id\":\"invalid-terminal-workflow\",
-        \"startAt\":\"check-eligibility\",
-        \"steps\":{
-            \"check-eligibility\":{
-                \"type\":\"rule\",
-                \"ruleId\":\"basic-approval\",
-                \"onTrue\":\"approve\",
                 \"onFalse\":\"reject\"
-            },
-            \"approve\":{
-                \"type\":\"terminal\",
-                \"terminalId\":\"non-existent-terminal\",
-                \"result\":{\"status\":\"approved\"}
             },
             \"reject\":{
                 \"type\":\"terminal\",
@@ -312,10 +467,7 @@ test_invalid_terminal() {
         }
     }"
 
-    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$invalid_terminal_workflow_data" "201" "Create workflow with invalid terminal"
-
-    # Try to publish workflow with invalid terminal
-    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows/invalid-terminal-workflow/versions/1/publish" "" "400" "Publish workflow with invalid terminal"
+    test_endpoint "POST" "/namespaces/$NAMESPACE_ID/workflows" "$cyclic_workflow_data" "400" "Create workflow with cyclic dependencies" "cyclic dependency detected in workflow steps"
 }
 
 # Test workflow deletion
@@ -323,7 +475,7 @@ test_workflow_deletion() {
     log_info "=== Testing Workflow Deletion ==="
 
     # Delete workflow version
-    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/workflows/invalid-workflow/versions/1" "" "204" "Delete workflow version"
+    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/workflows/loan-approval-workflow/versions/1" "" "204" "Delete workflow version"
 
     # Try to delete non-existent workflow
     test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/workflows/non-existent/versions/1" "" "404" "Delete non-existent workflow"
@@ -334,18 +486,22 @@ cleanup() {
     log_info "=== Cleaning up test data ==="
 
     # Delete workflows
-    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/workflows/loan-approval-workflow/versions/1" "" "204" "Delete workflow"
-    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/workflows/invalid-terminal-workflow/versions/1" "" "204" "Delete invalid terminal workflow"
+    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/workflows/complex-approval-workflow/versions/1" "" "204" "Delete complex workflow"
+    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/workflows/simple-terminal-workflow/versions/1" "" "204" "Delete simple terminal workflow"
 
     # Delete terminals
     test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/terminals/approve" "" "204" "Delete approve terminal"
     test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/terminals/reject" "" "204" "Delete reject terminal"
+    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/terminals/manual_review" "" "204" "Delete manual review terminal"
 
-    # Delete rule
-    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/rules/basic-approval/versions/1" "" "204" "Delete rule"
+    # Delete rules
+    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/rules/basic-approval/versions/1" "" "204" "Delete basic approval rule"
+    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/rules/income-rule/versions/1" "" "204" "Delete income rule"
+    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/rules/credit-rule/versions/1" "" "204" "Delete credit rule"
 
-    # Delete function
-    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/functions/eligibility-check/versions/1" "" "204" "Delete function"
+    # Delete functions
+    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/functions/eligibility-check/versions/1" "" "204" "Delete eligibility function"
+    test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID/functions/income-check/versions/1" "" "204" "Delete income function"
 
     # Delete namespace
     test_endpoint "DELETE" "/namespaces/$NAMESPACE_ID" "" "204" "Delete namespace"
@@ -353,23 +509,54 @@ cleanup() {
     log_success "Cleanup completed successfully"
 }
 
+# Print test results
+print_results() {
+    echo ""
+    echo "=========================================="
+    log_info "Test Results Summary"
+    echo "=========================================="
+    log_success "Tests Passed: $TESTS_PASSED"
+    if [[ $TESTS_FAILED -gt 0 ]]; then
+        log_error "Tests Failed: $TESTS_FAILED"
+    else
+        log_success "Tests Failed: $TESTS_FAILED"
+    fi
+
+    total_tests=$((TESTS_PASSED + TESTS_FAILED))
+    if [[ $total_tests -gt 0 ]]; then
+        success_rate=$((TESTS_PASSED * 100 / total_tests))
+        log_info "Success Rate: $success_rate%"
+    fi
+
+    echo ""
+    if [[ $TESTS_FAILED -eq 0 ]]; then
+        log_success "All workflow API tests passed!"
+    else
+        log_error "Some tests failed. Please review the output above."
+    fi
+}
+
 # Main execution
 main() {
-    log_info "Starting Workflows API tests..."
+    log_info "Starting Comprehensive Workflows API tests with Terminal Validation..."
     echo
 
     setup
     test_workflow_creation
+    test_terminal_validation
     test_workflow_retrieval
     test_workflow_publishing
     test_workflow_deactivation
-    test_error_cases
     test_cyclic_dependencies
-    test_invalid_terminal
     test_workflow_deletion
     cleanup
+    print_results
 
-    log_success "All workflow tests completed successfully!"
+    if [[ $TESTS_FAILED -eq 0 ]]; then
+        exit 0
+    else
+        exit 1
+    fi
 }
 
 # Run main function

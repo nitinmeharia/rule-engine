@@ -1,314 +1,233 @@
-# API Testing Scripts
+# Rule Engine Testing Scripts
 
-This directory contains comprehensive testing scripts for the Generic Rule Engine APIs.
+This directory contains comprehensive testing scripts for the Rule Engine API, including specialized tests for workflow terminal validation.
 
 ## Scripts Overview
 
-### 1. `test-api-e2e.sh` - Comprehensive End-to-End Tests
-The main testing script that covers all API functionality with detailed validation.
+### Core Testing Scripts
 
-**Features:**
-- Health endpoint testing
-- Authentication and authorization testing
-- Namespaces API (CRUD operations)
-- Fields API (CRUD operations)
-- Role-based access control (RBAC) testing
-- Error handling validation
-- Edge cases testing
-- Performance testing
-- Colored output with detailed test results
+1. **`test-api-e2e.sh`** - Complete end-to-end API testing suite
+   - Tests all API endpoints with authentication and error handling
+   - Includes comprehensive workflow testing with terminal validation
+   - Validates RBAC, error handling, and edge cases
 
-**Usage:**
-```bash
-# Run with server already running
-./scripts/test-api-e2e.sh
+2. **`test-workflows-api.sh`** - Enhanced workflow testing with terminal validation
+   - **NEW**: Comprehensive terminal validation tests
+   - Tests workflow lifecycle (create, publish, deactivate, delete)
+   - Validates that all workflow paths end with terminal steps
+   - Tests cyclic dependencies and error conditions
+   - Includes detailed error message validation
 
-# Or use Makefile target
-make test-api
-```
+3. **`test-rules-api.sh`** - Rules API testing
+   - Tests rule creation, validation, and publishing
+   - Validates dependency checking and RBAC
 
-### 2. `test-api-quick.sh` - Quick Validation Tests
-A lightweight script for fast validation during development.
+4. **`test-functions-api.sh`** - Functions API testing
+   - Tests function creation, publishing, and execution
+   - Validates supported function types and error handling
 
-**Features:**
-- Essential functionality only
-- Fast execution
-- Basic health checks
-- Core API validation
-- RBAC testing
+5. **`test-terminals-api.sh`** - Terminals API testing
+   - Tests terminal CRUD operations
+   - Validates parent namespace relationships
 
-**Usage:**
-```bash
-# Run quick tests
-./scripts/test-api-quick.sh
+### Utility Scripts
 
-# Or use Makefile target
-make test-api-quick
-```
+6. **`generate-jwt.py`** - JWT token generator
+   - Generates authentication tokens for API testing
+   - Supports different roles (admin, viewer, executor)
 
-**Example Output:**
-```
-==========================================
-    Generic Rule Engine - Quick Tests
-==========================================
-Base URL: http://localhost:8080
+7. **`setup-test-db.sh`** - Database setup
+   - Sets up test database with required schema
+   - Runs migrations and initializes test data
 
-ℹ INFO: Server is running
-✓ PASS: Health check
-✓ PASS: Missing auth header
-✓ PASS: Valid admin token
-✓ PASS: Create namespace
-✓ PASS: Get namespace
-✓ PASS: Delete namespace
-✓ PASS: Create namespace for fields
-✓ PASS: Create field
-✓ PASS: List fields
-✓ PASS: Viewer cannot create field
-✓ PASS: Viewer can list fields
-✓ PASS: Cleanup test namespace
-
-==========================================
-           QUICK TEST SUMMARY
-==========================================
-Total Tests: 12
-Passed: 12
-Failed: 0
-
-All quick tests passed! 🎉
-```
-
-### 3. `generate-jwt.py` - JWT Token Generator
-Python script for generating JWT tokens for testing.
-
-**Features:**
-- Generate tokens with different roles
-- Decode and verify existing tokens
-- Multiple output formats
-- Configurable expiration
-
-**Usage:**
-```bash
-# Generate admin token
-python3 scripts/generate-jwt.py --role admin
-
-# Generate viewer token
-python3 scripts/generate-jwt.py --role viewer
-
-# Generate token with custom client ID
-python3 scripts/generate-jwt.py --client-id my-client --role admin
-
-# Get curl command with token
-python3 scripts/generate-jwt.py --role admin --format curl
-
-# Decode existing token
-python3 scripts/generate-jwt.py --decode <token>
-
-# Or use Makefile target
-make generate-jwt
-```
+8. **`cleanup-test-data.sh`** - Test data cleanup
+   - Cleans up test data after testing
+   - Removes test namespaces and related data
 
 ## Prerequisites
 
-### Required Tools
-- `curl` - For HTTP requests
-- `bash` - For shell scripts
-- `python3` - For JWT token generation (optional, fallback available)
+1. **Python 3.x** with PyJWT installed:
+   ```bash
+   pip install PyJWT
+   ```
 
-### Python Dependencies
-If using Python for JWT generation:
+2. **Server running** on `http://localhost:8080`
+
+3. **Database** properly configured and accessible
+
+## Quick Start
+
+### 1. Run Complete E2E Tests
 ```bash
-pip install PyJWT
+# Run all tests including enhanced workflow validation
+./scripts/test-api-e2e.sh
 ```
 
-> **Note:** If you see `Error: PyJWT library is required. Install it with: pip install PyJWT`, ensure you are using the correct Python environment (e.g., your virtualenv or conda environment) and that `python3` points to the Python where PyJWT is installed.
-
-### Server Setup
-Ensure the rule engine server is running:
+### 2. Run Specific Test Suites
 ```bash
-# Start the server
-make run
+# Test workflows with comprehensive terminal validation
+./scripts/test-workflows-api.sh
 
-# Or run directly
-go run ./cmd/api
+# Test rules API
+./scripts/test-rules-api.sh
+
+# Test functions API
+./scripts/test-functions-api.sh
+
+# Test terminals API
+./scripts/test-terminals-api.sh
 ```
 
-## Makefile Targets
-
-The following Makefile targets are available for easy testing:
-
+### 3. Generate JWT Tokens
 ```bash
-# Run comprehensive API tests (server must be running)
-make test-api
+# Generate admin token
+python3 scripts/generate-jwt.py --role admin --client-id test-client
 
-# Run full end-to-end tests (starts server automatically)
-make test-api-e2e
+# Generate viewer token
+python3 scripts/generate-jwt.py --role viewer --client-id test-client
 
-# Run quick API tests
-make test-api-quick
-
-# Generate JWT token
-make generate-jwt
+# Generate executor token
+python3 scripts/generate-jwt.py --role executor --client-id test-client
 ```
 
-## Test Coverage
+## Workflow Terminal Validation
 
-### Health Endpoint
-- ✅ Health check without authentication
-- ✅ Response format validation
+The enhanced workflow testing includes comprehensive validation to ensure all workflow paths end with terminal steps:
 
-### Authentication
-- ✅ Missing authorization header
-- ✅ Invalid token format
-- ✅ Invalid JWT signature
-- ✅ Expired tokens (when available)
+### Test Scenarios
 
-### Namespaces API
-- ✅ List namespaces (all roles)
-- ✅ Create namespace (admin only)
-- ✅ Get specific namespace
-- ✅ Delete namespace (admin only)
-- ✅ Duplicate namespace creation
-- ✅ Invalid namespace data
-- ✅ Non-existent namespace access
+1. **Valid Workflows**
+   - Simple workflows with direct terminal paths
+   - Complex workflows with multiple branches
+   - Single terminal workflows
 
-### Fields API
-- ✅ List fields in namespace
-- ✅ Create field (admin only)
-- ✅ Duplicate field creation
-- ✅ Invalid field data
-- ✅ Fields in non-existent namespace
-- ✅ Multiple fields in namespace
+2. **Invalid Workflows (Expected to Fail)**
+   - Missing `onTrue` path
+   - Missing `onFalse` path
+   - Paths leading to non-terminal steps
+   - Steps leading to non-existent steps
+   - Unknown step types
+   - Malformed step data
 
-### Role-Based Access Control (RBAC)
-- ✅ Admin role permissions
-- ✅ Viewer role permissions
-- ✅ Executor role permissions
-- ✅ Forbidden operations validation
+3. **Error Validation**
+   - Validates specific error messages
+   - Ensures actionable feedback for users
+   - Tests both status codes and error content
 
-### Error Handling
-- ✅ Malformed JSON
-- ✅ Missing required fields
-- ✅ Invalid field types
-- ✅ Validation errors
+### Expected Error Messages
 
-### Edge Cases
-- ✅ Very long input values
-- ✅ Special characters
-- ✅ Empty values
-- ✅ Boundary conditions
+The validation returns specific, actionable error messages:
 
-### Performance
-- ✅ Response time validation
-- ✅ Concurrent request handling
+- `"Validation Error: The 'onTrue' path for step 'step-name' does not lead to a terminal"`
+- `"Validation Error: The 'onFalse' path for step 'step-name' does not lead to a terminal"`
+- `"Validation Error: Step 'step-name' is invalid or missing and does not lead to a terminal"`
 
-## Configuration
+## Test Results
 
-### Environment Variables
-The scripts use the following configuration (can be modified in the scripts):
+### Success Indicators
+- ✅ All tests pass with expected status codes
+- ✅ Error messages match expected patterns
+- ✅ Terminal validation correctly identifies invalid workflows
+- ✅ Valid workflows are accepted
 
-```bash
-BASE_URL="http://localhost:8080"
-JWT_SECRET="dev-secret-key-change-in-production"
-CLIENT_ID="test-client"
-```
-
-### Customization
-You can modify the scripts to:
-- Change the base URL for different environments
-- Use different JWT secrets
-- Add custom test cases
-- Modify expected responses
-
-## Output Format
-
-### Success Output
-```
-✓ PASS: Health check (no auth)
-✓ PASS: Create namespace (admin)
-✓ PASS: List fields (viewer)
-```
-
-### Failure Output
-```
-✗ FAIL: Create namespace (viewer - forbidden) (Expected: 403, Got: 200)
-  Response: {"success":true,"namespace":{...}}
-```
-
-### Summary
-```
-==========================================
-           TEST SUMMARY
-==========================================
-Total Tests: 45
-Passed: 43
-Failed: 2
-
-Some tests failed! ❌
-```
+### Failure Indicators
+- ❌ Unexpected status codes
+- ❌ Missing or incorrect error messages
+- ❌ Valid workflows rejected
+- ❌ Invalid workflows accepted
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Server not running**
+1. **Server Not Running**
+   ```bash
+   # Start the server first
+   go run ./cmd/api
    ```
-   Error: Server does not appear to be running at http://localhost:8080
-   ```
-   **Solution:** Start the server with `make run`
 
-2. **Database connection issues**
+2. **Database Connection Issues**
+   ```bash
+   # Check database configuration
+   ./scripts/setup-test-db.sh
    ```
-   Error: Failed to connect to database
-   ```
-   **Solution:** Ensure PostgreSQL is running and migrations are applied
 
-3. **JWT token issues**
+3. **JWT Token Issues**
+   ```bash
+   # Regenerate tokens
+   python3 scripts/generate-jwt.py --role admin --client-id test-client
    ```
-   Error: Invalid JWT token
-   ```
-   **Solution:** Check JWT secret configuration matches server config
 
-4. **Permission denied**
+4. **Permission Issues**
+   ```bash
+   # Make scripts executable
+   chmod +x scripts/*.sh
    ```
-   Error: Permission denied
-   ```
-   **Solution:** Make scripts executable: `chmod +x scripts/*.sh`
-
-5. **PyJWT not found or Python environment issues**
-   ```
-   Error: PyJWT library is required. Install it with: pip install PyJWT
-   ```
-   **Solution:**
-   - Run `pip install PyJWT` (or `pip3 install PyJWT`)
-   - Make sure you are using the correct Python environment (e.g., activate your virtualenv or conda environment)
-   - Check that `python3` points to the Python where PyJWT is installed: `python3 -m pip show PyJWT`
-   - If using Anaconda, try `conda install pyjwt`
 
 ### Debug Mode
-For debugging, you can modify the scripts to show more verbose output:
-- Add `set -x` at the beginning of bash scripts
-- Use `--verbose` flag with curl commands
-- Enable debug logging in the server
 
-## Continuous Integration
+To run tests with verbose output:
+```bash
+# Enable debug output
+export DEBUG=1
+./scripts/test-workflows-api.sh
+```
 
-These scripts can be integrated into CI/CD pipelines:
+## CI/CD Integration
 
+### GitHub Actions Example
 ```yaml
-# Example GitHub Actions step
-- name: Run API Tests
-  run: |
-    make run &
-    sleep 10
-    make test-api
+name: API Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.21'
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: |
+          pip install PyJWT
+          go mod download
+      - name: Start server
+        run: go run ./cmd/api &
+      - name: Wait for server
+        run: sleep 10
+      - name: Run tests
+        run: ./scripts/test-api-e2e.sh
+```
+
+### Docker Integration
+```bash
+# Run tests in Docker container
+docker run --rm -v $(pwd):/app -w /app golang:1.21 bash -c "
+  go mod download &&
+  go run ./cmd/api &
+  sleep 10 &&
+  ./scripts/test-api-e2e.sh
+"
 ```
 
 ## Contributing
 
-When adding new API endpoints, update the testing scripts to include:
-1. Happy path testing
-2. Error case testing
-3. RBAC validation
-4. Edge case testing
+When adding new tests:
 
-Follow the existing patterns in the scripts for consistency. 
+1. Follow the existing pattern for test functions
+2. Include both positive and negative test cases
+3. Validate error messages for failure scenarios
+4. Update this README with new test descriptions
+5. Ensure tests are idempotent and clean up after themselves
+
+## Security Considerations
+
+- Tests use dedicated test namespaces to avoid conflicts
+- JWT tokens have limited scope and expiration
+- Test data is cleaned up after each run
+- No production data is accessed during testing 
