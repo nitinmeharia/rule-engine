@@ -29,6 +29,7 @@ func (r *FunctionRepository) Create(ctx context.Context, function *domain.Functi
 		Type:       &function.Type,
 		Args:       function.Args,
 		Values:     function.Values,
+		ReturnType: &function.ReturnType,
 		CreatedBy:  function.CreatedBy,
 	})
 	if err != nil {
@@ -212,6 +213,7 @@ func (r *FunctionRepository) Update(ctx context.Context, function *domain.Functi
 		Type:       &function.Type,
 		Args:       function.Args,
 		Values:     function.Values,
+		ReturnType: &function.ReturnType,
 		CreatedBy:  function.CreatedBy,
 	})
 	if err != nil {
@@ -241,6 +243,13 @@ func (r *FunctionRepository) Publish(ctx context.Context, namespace, functionID 
 	if err != nil {
 		return fmt.Errorf("failed to publish function: %w", err)
 	}
+
+	// Refresh the namespace checksum to trigger cache refresh
+	err = r.db.RefreshNamespaceChecksum(ctx, namespace)
+	if err != nil {
+		return fmt.Errorf("failed to refresh namespace checksum: %w", err)
+	}
+
 	return nil
 }
 

@@ -222,6 +222,13 @@ func (r *RuleRepository) Publish(ctx context.Context, namespace, ruleID string, 
 	if err != nil {
 		return fmt.Errorf("failed to publish rule: %w", err)
 	}
+
+	// Refresh the namespace checksum to trigger cache refresh
+	err = r.db.RefreshNamespaceChecksum(ctx, namespace)
+	if err != nil {
+		return fmt.Errorf("failed to refresh namespace checksum: %w", err)
+	}
+
 	return nil
 }
 

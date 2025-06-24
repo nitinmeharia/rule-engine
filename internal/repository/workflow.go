@@ -166,7 +166,18 @@ func (r *WorkflowRepository) Publish(ctx context.Context, namespace, workflowID 
 		PublishedBy: &publishedBy,
 	}
 
-	return r.queries.PublishWorkflow(ctx, params)
+	err = r.queries.PublishWorkflow(ctx, params)
+	if err != nil {
+		return mapWorkflowError(err)
+	}
+
+	// Refresh the namespace checksum to trigger cache refresh
+	err = r.queries.RefreshNamespaceChecksum(ctx, namespace)
+	if err != nil {
+		return fmt.Errorf("failed to refresh namespace checksum: %w", err)
+	}
+
+	return nil
 }
 
 // Deactivate deactivates a workflow (active → inactive)

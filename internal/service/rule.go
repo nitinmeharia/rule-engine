@@ -23,20 +23,22 @@ type RuleServiceInterface interface {
 
 // RuleService handles business logic for rules
 type RuleService struct {
-	repo         domain.RuleRepository
-	functionRepo domain.FunctionRepository
-	fieldRepo    domain.FieldRepository
+	repo          domain.RuleRepository
+	functionRepo  domain.FunctionRepository
+	fieldRepo     domain.FieldRepository
+	namespaceRepo domain.NamespaceRepository
 }
 
 // Ensure RuleService implements RuleServiceInterface
 var _ RuleServiceInterface = (*RuleService)(nil)
 
 // NewRuleService creates a new rule service
-func NewRuleService(repo domain.RuleRepository, functionRepo domain.FunctionRepository, fieldRepo domain.FieldRepository) *RuleService {
+func NewRuleService(repo domain.RuleRepository, functionRepo domain.FunctionRepository, fieldRepo domain.FieldRepository, namespaceRepo domain.NamespaceRepository) *RuleService {
 	return &RuleService{
-		repo:         repo,
-		functionRepo: functionRepo,
-		fieldRepo:    fieldRepo,
+		repo:          repo,
+		functionRepo:  functionRepo,
+		fieldRepo:     fieldRepo,
+		namespaceRepo: namespaceRepo,
 	}
 }
 
@@ -174,6 +176,12 @@ func (s *RuleService) UpdateRule(ctx context.Context, namespace, ruleID string, 
 
 // PublishRule publishes a draft rule (makes it active)
 func (s *RuleService) PublishRule(ctx context.Context, namespace, ruleID, publishedBy string) error {
+	// Defensive: Check namespace existence
+	ns, err := s.namespaceRepo.GetByID(ctx, namespace)
+	if err != nil || ns == nil {
+		return domain.ErrNamespaceNotFound
+	}
+
 	// Get the draft version
 	draftRule, err := s.repo.GetDraftVersion(ctx, namespace, ruleID)
 	if err != nil {

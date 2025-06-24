@@ -57,6 +57,11 @@ func (m *MockFunctionService) PublishFunction(ctx context.Context, namespace, fu
 	return args.Error(0)
 }
 
+func (m *MockFunctionService) DeleteFunction(ctx context.Context, namespace, functionID string, version int32) error {
+	args := m.Called(ctx, namespace, functionID, version)
+	return args.Error(0)
+}
+
 func setupFunctionTestContext() (*gin.Context, *httptest.ResponseRecorder) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

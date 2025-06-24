@@ -25,9 +25,10 @@ type WorkflowServiceInterface interface {
 
 // WorkflowService implements workflow business logic
 type WorkflowService struct {
-	workflowRepo domain.WorkflowRepository
-	ruleRepo     domain.RuleRepository
-	terminalRepo domain.TerminalRepository
+	workflowRepo  domain.WorkflowRepository
+	ruleRepo      domain.RuleRepository
+	terminalRepo  domain.TerminalRepository
+	namespaceRepo domain.NamespaceRepository
 }
 
 // NewWorkflowService creates a new workflow service
@@ -35,11 +36,13 @@ func NewWorkflowService(
 	workflowRepo domain.WorkflowRepository,
 	ruleRepo domain.RuleRepository,
 	terminalRepo domain.TerminalRepository,
+	namespaceRepo domain.NamespaceRepository,
 ) *WorkflowService {
 	return &WorkflowService{
-		workflowRepo: workflowRepo,
-		ruleRepo:     ruleRepo,
-		terminalRepo: terminalRepo,
+		workflowRepo:  workflowRepo,
+		ruleRepo:      ruleRepo,
+		terminalRepo:  terminalRepo,
+		namespaceRepo: namespaceRepo,
 	}
 }
 
@@ -146,6 +149,12 @@ func (s *WorkflowService) Update(ctx context.Context, workflow *domain.Workflow)
 
 // Publish publishes a workflow (draft → active)
 func (s *WorkflowService) Publish(ctx context.Context, namespace, workflowID string, version int32, publishedBy string) error {
+	// Defensive: Check namespace existence
+	ns, err := s.namespaceRepo.GetByID(ctx, namespace)
+	if err != nil || ns == nil {
+		return domain.ErrNamespaceNotFound
+	}
+
 	// Get the workflow to validate
 	workflow, err := s.workflowRepo.GetByID(ctx, namespace, workflowID, version)
 	if err != nil {

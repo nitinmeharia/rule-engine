@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"errors"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/rule-engine/internal/domain"
 )
@@ -20,15 +22,16 @@ type FunctionServiceInterface interface {
 
 // FunctionService handles business logic for functions
 type FunctionService struct {
-	repo domain.FunctionRepository
+	repo          domain.FunctionRepository
+	namespaceRepo domain.NamespaceRepository
 }
 
 // Ensure FunctionService implements FunctionServiceInterface
 var _ FunctionServiceInterface = (*FunctionService)(nil)
 
 // NewFunctionService creates a new function service
-func NewFunctionService(repo domain.FunctionRepository) *FunctionService {
-	return &FunctionService{repo: repo}
+func NewFunctionService(repo domain.FunctionRepository, namespaceRepo domain.NamespaceRepository) *FunctionService {
+	return &FunctionService{repo: repo, namespaceRepo: namespaceRepo}
 }
 
 // CreateFunction creates a new function
@@ -150,6 +153,7 @@ func (s *FunctionService) UpdateFunction(ctx context.Context, namespace, functio
 			function.FunctionID = functionID
 			function.Version = active.Version + 1
 			function.Status = "draft"
+			function.ReturnType = function.ComputeReturnType()
 			return s.repo.Create(ctx, function)
 		}
 		return err
@@ -160,15 +164,25 @@ func (s *FunctionService) UpdateFunction(ctx context.Context, namespace, functio
 	function.FunctionID = functionID
 	function.Version = draft.Version
 	function.Status = "draft"
+	function.ReturnType = function.ComputeReturnType()
 	return s.repo.Update(ctx, function)
 }
 
 // PublishFunction publishes a function (draft → active)
 func (s *FunctionService) PublishFunction(ctx context.Context, namespace, functionID, publishedBy string) error {
+	// Defensive: Check namespace existence
+	ns, err := s.namespaceRepo.GetByID(ctx, namespace)
+	if err != nil || ns == nil {
+		return domain.ErrNamespaceNotFound
+	}
+
 	// Get the draft version
 	draft, err := s.repo.GetDraftVersion(ctx, namespace, functionID)
 	if err != nil {
-		return domain.ErrFunctionNotFound
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrFunctionNotFound
+		}
+		return domain.ErrInternalError
 	}
 
 	// Validate the function using domain model validation

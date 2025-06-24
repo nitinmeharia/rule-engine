@@ -3,9 +3,11 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"runtime"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 	"github.com/rule-engine/internal/domain"
 )
 
@@ -128,6 +130,15 @@ func (h *ResponseHandler) MapDomainErrorToResponse(c *gin.Context, err error) {
 		unwrapErr = errors.Unwrap(unwrapErr)
 	}
 
+	// Log the original error details before converting to generic 500
+	log.Error().
+		Str("error", err.Error()).
+		Str("method", c.Request.Method).
+		Str("path", c.Request.URL.Path).
+		Str("client_ip", c.ClientIP()).
+		Str("stack_trace", getStackTrace()).
+		Msg("Unhandled error converted to 500 Internal Server Error")
+
 	// Default to internal server error
 	c.JSON(http.StatusInternalServerError, gin.H{
 		"code":    "INTERNAL_SERVER_ERROR",
@@ -247,4 +258,10 @@ func (h *ResponseHandler) ConvertWorkflowsToResponse(workflows []*domain.Workflo
 		response = append(response, h.ConvertWorkflowToResponse(workflow))
 	}
 	return response
+}
+
+func getStackTrace() string {
+	buf := make([]byte, 1024)
+	n := runtime.Stack(buf, false)
+	return string(buf[:n])
 }

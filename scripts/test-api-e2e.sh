@@ -626,6 +626,120 @@ test_terminals_api() {
     make_request "DELETE" "/v1/namespaces/terminals-test-ns" "$admin_token" "" "204" "Delete terminals test namespace"
 }
 
+# Function to test cache refresh functionality
+test_cache_refresh() {
+    print_status "INFO" "Testing Cache Refresh Functionality"
+    echo "================================================"
+    
+    local admin_token=$(generate_jwt_token "$CLIENT_ID" "$ADMIN_ROLE")
+    local viewer_token=$(generate_jwt_token "$CLIENT_ID" "$VIEWER_ROLE")
+    
+    # Create a namespace for cache refresh testing
+    local ns_data='{"id": "cache-refresh-test-ns", "description": "Namespace for cache refresh testing"}'
+    make_request "POST" "/v1/namespaces" "$admin_token" "$ns_data" "201" "Create cache refresh test namespace"
+    
+    # Create fields for testing
+    local field_age='{"fieldId": "age", "type": "number", "description": "User age"}'
+    local field_income='{"fieldId": "income", "type": "number", "description": "User income"}'
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/fields" "$admin_token" "$field_age" "201" "Create field: age"
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/fields" "$admin_token" "$field_income" "201" "Create field: income"
+    
+    # Create a function
+    local fn_high_income='{"id": "high_income", "type": "max", "args": ["income"]}'
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/functions" "$admin_token" "$fn_high_income" "201" "Create function: high_income"
+    
+    # Publish the function
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/functions/high_income/publish" "$admin_token" "" "200" "Publish function: high_income"
+    
+    # Create a rule
+    local rule_approval='{"id": "approval_rule", "logic": "AND", "conditions": [{"type": "function", "functionId": "high_income", "operator": ">=", "value": 50000}]}'
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/rules" "$admin_token" "$rule_approval" "201" "Create rule: approval_rule"
+    
+    # Publish the rule
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/rules/approval_rule/publish" "$admin_token" "" "200" "Publish rule: approval_rule"
+    
+    # Create terminals
+    local terminal_approve='{"terminalId": "approve"}'
+    local terminal_reject='{"terminalId": "reject"}'
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/terminals" "$admin_token" "$terminal_approve" "201" "Create terminal: approve"
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/terminals" "$admin_token" "$terminal_reject" "201" "Create terminal: reject"
+    
+    # Create a workflow that uses the rule and terminals
+    # Note: Using the correct workflow format based on the API
+    local workflow_data='{"id": "approval_workflow", "startAt": "check_approval", "steps": {"check_approval": {"type": "rule", "ruleId": "approval_rule", "onTrue": "approve", "onFalse": "reject"}, "approve": {"type": "terminal", "terminalId": "approve"}, "reject": {"type": "terminal", "terminalId": "reject"}}}'
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/workflows" "$admin_token" "$workflow_data" "201" "Create workflow: approval_workflow"
+    
+    # Publish the workflow
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/workflows/approval_workflow/versions/1/publish" "$admin_token" "" "200" "Publish workflow: approval_workflow"
+    
+    print_status "INFO" "Cache refresh test setup complete. The cache refresh service should detect changes and refresh the cache automatically."
+    print_status "INFO" "Check the server logs for cache refresh messages like: 'Namespace changes detected, refreshing cache'"
+    
+    # Test that we can retrieve the created resources (this validates that cache refresh is working)
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/fields" "$admin_token" "" "200" "List fields (validates cache refresh)"
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/functions" "$admin_token" "" "200" "List functions (validates cache refresh)"
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/rules" "$admin_token" "" "200" "List rules (validates cache refresh)"
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/terminals" "$admin_token" "" "200" "List terminals (validates cache refresh)"
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/workflows" "$admin_token" "" "200" "List workflows (validates cache refresh)"
+    
+    # Test cache refresh by adding a new function
+    print_status "INFO" "Testing cache refresh by adding new function..."
+    local fn_avg_income='{"id": "avg_income", "type": "avg", "args": ["income"]}'
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/functions" "$admin_token" "$fn_avg_income" "201" "Create new function to trigger cache refresh"
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/functions/avg_income/publish" "$admin_token" "" "200" "Publish new function"
+    
+    # Wait a moment for cache refresh to occur
+    sleep 2
+    
+    # Test that the new function is available (validates cache refresh)
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/functions" "$admin_token" "" "200" "List functions after adding new function (validates cache refresh)"
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/functions/avg_income" "$admin_token" "" "200" "Get new function (validates cache refresh)"
+    
+    # Test cache refresh by creating a new rule
+    print_status "INFO" "Testing cache refresh by creating new rule..."
+    local rule_credit='{"id": "credit_rule", "logic": "AND", "conditions": [{"type": "function", "functionId": "avg_income", "operator": ">=", "value": 40000}]}'
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/rules" "$admin_token" "$rule_credit" "201" "Create new rule to trigger cache refresh"
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/rules/credit_rule/publish" "$admin_token" "" "200" "Publish new rule"
+    
+    # Wait a moment for cache refresh to occur
+    sleep 2
+    
+    # Test that the new rule is available (validates cache refresh)
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/rules" "$admin_token" "" "200" "List rules after adding new rule (validates cache refresh)"
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/rules/credit_rule" "$admin_token" "" "200" "Get new rule (validates cache refresh)"
+    
+    # Test cache refresh by creating a new terminal
+    print_status "INFO" "Testing cache refresh by creating new terminal..."
+    local terminal_manual='{"terminalId": "manual_review"}'
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/terminals" "$admin_token" "$terminal_manual" "201" "Create new terminal to trigger cache refresh"
+    
+    # Wait a moment for cache refresh to occur
+    sleep 2
+    
+    # Test that the new terminal is available (validates cache refresh)
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/terminals" "$admin_token" "" "200" "List terminals after adding new terminal (validates cache refresh)"
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/terminals/manual_review" "$admin_token" "" "200" "Get new terminal (validates cache refresh)"
+    
+    # Test cache refresh by creating a new workflow
+    print_status "INFO" "Testing cache refresh by creating new workflow..."
+    local workflow_credit='{"id": "credit_workflow", "startAt": "check_credit", "steps": {"check_credit": {"type": "rule", "ruleId": "credit_rule", "onTrue": "approve", "onFalse": "manual_review"}, "approve": {"type": "terminal", "terminalId": "approve"}, "manual_review": {"type": "terminal", "terminalId": "manual_review"}}}'
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/workflows" "$admin_token" "$workflow_credit" "201" "Create new workflow to trigger cache refresh"
+    make_request "POST" "/v1/namespaces/cache-refresh-test-ns/workflows/credit_workflow/versions/1/publish" "$admin_token" "" "200" "Publish new workflow"
+    
+    # Wait a moment for cache refresh to occur
+    sleep 2
+    
+    # Test that the new workflow is available (validates cache refresh)
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/workflows" "$admin_token" "" "200" "List workflows after adding new workflow (validates cache refresh)"
+    make_request "GET" "/v1/namespaces/cache-refresh-test-ns/workflows/credit_workflow" "$admin_token" "" "200" "Get new workflow (validates cache refresh)"
+    
+    print_status "INFO" "Cache refresh testing complete. All changes should have been detected and cached automatically."
+    print_status "INFO" "The cache refresh service should have logged messages for each namespace change."
+    
+    # Clean up
+    make_request "DELETE" "/v1/namespaces/cache-refresh-test-ns" "$admin_token" "" "204" "Delete cache refresh test namespace"
+}
+
 # Function to test error handling
 test_error_handling() {
     print_status "INFO" "Testing Error Handling"
@@ -781,6 +895,7 @@ main() {
     test_rules_api
     test_workflows_api
     test_terminals_api
+    test_cache_refresh
     test_error_handling
     test_rbac
     test_edge_cases

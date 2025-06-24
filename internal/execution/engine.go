@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/rule-engine/internal/domain"
+	"github.com/rule-engine/internal/infra"
 )
 
 // Engine represents the rule execution engine
@@ -51,6 +54,13 @@ type ExecutionContext struct {
 	StartTime time.Time
 }
 
+// CacheInfo represents cache information for a namespace
+type CacheInfo struct {
+	Namespace   string    `json:"namespace"`
+	Checksum    string    `json:"checksum"`
+	LastRefresh time.Time `json:"lastRefresh"`
+}
+
 // NewEngine creates a new execution engine
 func NewEngine(
 	cacheRepo domain.CacheRepository,
@@ -79,24 +89,30 @@ func NewEngine(
 
 // ExecuteRule executes a specific rule
 func (e *Engine) ExecuteRule(ctx context.Context, req *domain.ExecutionRequest) (*domain.ExecutionResponse, error) {
+	startTime := time.Now()
+
 	if req.RuleID == nil {
+		infra.ExecutionErrors.WithLabelValues(req.Namespace).Inc()
 		return nil, domain.ErrValidationError
 	}
 
 	// Ensure cache is fresh
 	if err := e.ensureFreshCache(ctx, req.Namespace); err != nil {
+		infra.ExecutionErrors.WithLabelValues(req.Namespace).Inc()
 		return nil, fmt.Errorf("failed to refresh cache: %w", err)
 	}
 
 	// Get namespace config
 	config, err := e.getNamespaceConfig(req.Namespace)
 	if err != nil {
+		infra.ExecutionErrors.WithLabelValues(req.Namespace).Inc()
 		return nil, err
 	}
 
 	// Find rule
 	rule, exists := config.Rules[*req.RuleID]
 	if !exists {
+		infra.ExecutionErrors.WithLabelValues(req.Namespace).Inc()
 		return nil, domain.ErrRuleNotFound
 	}
 
@@ -118,6 +134,7 @@ func (e *Engine) ExecuteRule(ctx context.Context, req *domain.ExecutionRequest) 
 	// Execute rule
 	result, err := e.evaluateRule(rule, config, execCtx)
 	if err != nil {
+		infra.ExecutionErrors.WithLabelValues(req.Namespace).Inc()
 		return nil, fmt.Errorf("rule execution failed: %w", err)
 	}
 
@@ -136,29 +153,39 @@ func (e *Engine) ExecuteRule(ctx context.Context, req *domain.ExecutionRequest) 
 		response.Trace = execCtx.TraceData
 	}
 
+	// Update metrics
+	duration := time.Since(startTime).Seconds()
+	infra.ExecutionDuration.WithLabelValues(req.Namespace).Observe(duration)
+
 	return response, nil
 }
 
 // ExecuteWorkflow executes a workflow
 func (e *Engine) ExecuteWorkflow(ctx context.Context, req *domain.ExecutionRequest) (*domain.ExecutionResponse, error) {
+	startTime := time.Now()
+
 	if req.WorkflowID == nil {
+		infra.ExecutionErrors.WithLabelValues(req.Namespace).Inc()
 		return nil, domain.ErrValidationError
 	}
 
 	// Ensure cache is fresh
 	if err := e.ensureFreshCache(ctx, req.Namespace); err != nil {
+		infra.ExecutionErrors.WithLabelValues(req.Namespace).Inc()
 		return nil, fmt.Errorf("failed to refresh cache: %w", err)
 	}
 
 	// Get namespace config
 	config, err := e.getNamespaceConfig(req.Namespace)
 	if err != nil {
+		infra.ExecutionErrors.WithLabelValues(req.Namespace).Inc()
 		return nil, err
 	}
 
 	// Find workflow
 	workflow, exists := config.Workflows[*req.WorkflowID]
 	if !exists {
+		infra.ExecutionErrors.WithLabelValues(req.Namespace).Inc()
 		return nil, domain.ErrWorkflowNotFound
 	}
 
@@ -180,6 +207,7 @@ func (e *Engine) ExecuteWorkflow(ctx context.Context, req *domain.ExecutionReque
 	// Execute workflow
 	result, err := e.evaluateWorkflow(workflow, config, execCtx)
 	if err != nil {
+		infra.ExecutionErrors.WithLabelValues(req.Namespace).Inc()
 		return nil, fmt.Errorf("workflow execution failed: %w", err)
 	}
 
@@ -197,6 +225,10 @@ func (e *Engine) ExecuteWorkflow(ctx context.Context, req *domain.ExecutionReque
 		execCtx.TraceData.Duration = time.Since(execCtx.StartTime).String()
 		response.Trace = execCtx.TraceData
 	}
+
+	// Update metrics
+	duration := time.Since(startTime).Seconds()
+	infra.ExecutionDuration.WithLabelValues(req.Namespace).Observe(duration)
 
 	return response, nil
 }
@@ -386,9 +418,9 @@ func (e *Engine) evaluateCondition(condition interface{}, config *NamespaceConfi
 func (e *Engine) evaluateOperator(dataValue interface{}, operator string, expectedValue interface{}, config *NamespaceConfig, ctx *ExecutionContext) bool {
 	switch operator {
 	case "eq", "equals":
-		return dataValue == expectedValue
+		return equalValues(dataValue, expectedValue)
 	case "ne", "not_equals":
-		return dataValue != expectedValue
+		return !equalValues(dataValue, expectedValue)
 	case "gt", "greater_than":
 		return compareNumbers(dataValue, expectedValue) > 0
 	case "gte", "greater_than_or_equal":
@@ -404,6 +436,16 @@ func (e *Engine) evaluateOperator(dataValue interface{}, operator string, expect
 	default:
 		return false
 	}
+}
+
+// equalValues compares two values for equality, normalizing numbers to float64
+func equalValues(a, b interface{}) bool {
+	aFloat, aOk := toFloat64(a)
+	bFloat, bOk := toFloat64(b)
+	if aOk && bOk {
+		return aFloat == bFloat
+	}
+	return reflect.DeepEqual(a, b)
 }
 
 // evaluateInOperator evaluates the 'in' operator
@@ -464,7 +506,7 @@ func (e *Engine) ensureFreshCache(ctx context.Context, namespace string) error {
 	// Check if we need to refresh
 	lastRefresh, exists := e.lastRefresh[namespace]
 	if !exists || time.Since(lastRefresh) > e.refreshInterval {
-		if err := e.refreshNamespaceCache(ctx, namespace); err != nil {
+		if err := e.RefreshNamespaceCache(ctx, namespace); err != nil {
 			return err
 		}
 		e.lastRefresh[namespace] = time.Now()
@@ -473,8 +515,8 @@ func (e *Engine) ensureFreshCache(ctx context.Context, namespace string) error {
 	return nil
 }
 
-// refreshNamespaceCache refreshes the cache for a specific namespace
-func (e *Engine) refreshNamespaceCache(ctx context.Context, namespace string) error {
+// RefreshNamespaceCache refreshes the cache for a specific namespace
+func (e *Engine) RefreshNamespaceCache(ctx context.Context, namespace string) error {
 	// Get current checksum
 	currentChecksum, err := e.cacheRepo.GetActiveConfigChecksum(ctx, namespace)
 	if err != nil && err != domain.ErrNamespaceNotFound {
@@ -486,7 +528,8 @@ func (e *Engine) refreshNamespaceCache(ctx context.Context, namespace string) er
 	cachedChecksum, exists := e.cache.checksums[namespace]
 	e.cache.mutex.RUnlock()
 
-	if exists && currentChecksum != nil && cachedChecksum == currentChecksum.Checksum {
+	// If we have a current checksum, check if cache is up to date
+	if currentChecksum != nil && exists && cachedChecksum == currentChecksum.Checksum {
 		return nil // Cache is up to date
 	}
 
@@ -501,8 +544,24 @@ func (e *Engine) refreshNamespaceCache(ctx context.Context, namespace string) er
 	e.cache.data[namespace] = config
 	if currentChecksum != nil {
 		e.cache.checksums[namespace] = currentChecksum.Checksum
+	} else {
+		// If no checksum exists, use an empty string to indicate the namespace is cached
+		// This allows the admin endpoint to return cache info even for empty namespaces
+		e.cache.checksums[namespace] = ""
 	}
 	e.cache.mutex.Unlock()
+
+	// Log debug information
+	if currentChecksum != nil {
+		log.Info().
+			Str("namespace", namespace).
+			Str("checksum", currentChecksum.Checksum).
+			Msg("Namespace cache refreshed successfully")
+	} else {
+		log.Info().
+			Str("namespace", namespace).
+			Msg("Namespace cache refreshed successfully (no checksum)")
+	}
 
 	return nil
 }
@@ -579,6 +638,29 @@ func (e *Engine) getNamespaceConfig(namespace string) (*NamespaceConfig, error) 
 	return config, nil
 }
 
+// ReloadCache atomically reloads all cached data
+func (e *Engine) ReloadCache(ctx context.Context) error {
+	e.refreshMutex.Lock()
+	defer e.refreshMutex.Unlock()
+
+	// Get all currently cached namespaces
+	e.cache.mutex.RLock()
+	cachedNamespaces := make([]string, 0, len(e.cache.data))
+	for namespace := range e.cache.data {
+		cachedNamespaces = append(cachedNamespaces, namespace)
+	}
+	e.cache.mutex.RUnlock()
+
+	// Reload each namespace
+	for _, namespace := range cachedNamespaces {
+		if err := e.RefreshNamespaceCache(ctx, namespace); err != nil {
+			return fmt.Errorf("failed to reload namespace %s: %w", namespace, err)
+		}
+	}
+
+	return nil
+}
+
 func (e *Engine) validateWorkflow(workflow *domain.Workflow) error {
 	if workflow == nil {
 		return domain.ErrValidationError
@@ -593,4 +675,39 @@ func (e *Engine) validateRule(rule *domain.Rule) error {
 	}
 	// ... rest of validation logic
 	return nil
+}
+
+// GetCacheInfo returns cache information for a namespace
+func (e *Engine) GetCacheInfo(namespace string) (*CacheInfo, error) {
+	e.cache.mutex.RLock()
+	defer e.cache.mutex.RUnlock()
+
+	// Debug logging
+	log.Debug().
+		Str("namespace", namespace).
+		Int("cache_size", len(e.cache.checksums)).
+		Msg("GetCacheInfo called")
+
+	checksum, exists := e.cache.checksums[namespace]
+	if !exists {
+		log.Debug().
+			Str("namespace", namespace).
+			Msg("Namespace not found in cache checksums")
+		return nil, domain.ErrNamespaceNotFound
+	}
+
+	log.Debug().
+		Str("namespace", namespace).
+		Str("checksum", checksum).
+		Msg("Namespace found in cache")
+
+	e.refreshMutex.RLock()
+	lastRefresh, exists := e.lastRefresh[namespace]
+	e.refreshMutex.RUnlock()
+
+	return &CacheInfo{
+		Namespace:   namespace,
+		Checksum:    checksum,
+		LastRefresh: lastRefresh,
+	}, nil
 }

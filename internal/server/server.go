@@ -7,8 +7,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rule-engine/internal/config"
+	"github.com/rule-engine/internal/execution"
 	"github.com/rule-engine/internal/handlers"
+	"github.com/rule-engine/internal/infra"
 	"github.com/rule-engine/internal/infra/logger"
 	"github.com/rule-engine/internal/models/db"
 	"github.com/rule-engine/internal/repository"
@@ -28,15 +31,20 @@ type Server struct {
 	ruleHandler      *handlers.RuleHandler
 	terminalHandler  *handlers.TerminalHandler
 	workflowHandler  *handlers.WorkflowHandler
+	executionHandler *handlers.ExecutionHandler
+	adminHandler     *handlers.AdminHandler
 	address          string
 }
 
 // New creates a new HTTP server instance
-func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Server, error) {
+func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger, engine *execution.Engine) (*Server, error) {
 	// Set Gin mode based on environment
 	if cfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
+
+	// Register Prometheus metrics
+	infra.RegisterMetrics()
 
 	// Create Gin router
 	router := gin.New()
@@ -67,10 +75,10 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 	// Initialize services
 	namespaceService := service.NewNamespaceService(namespaceRepo)
 	fieldService := service.NewFieldService(fieldRepo)
-	functionService := service.NewFunctionService(functionRepo)
-	ruleService := service.NewRuleService(ruleRepo, functionRepo, fieldRepo)
+	functionService := service.NewFunctionService(functionRepo, namespaceRepo)
+	ruleService := service.NewRuleService(ruleRepo, functionRepo, fieldRepo, namespaceRepo)
 	terminalService := service.NewTerminalService(terminalRepo, namespaceRepo)
-	workflowService := service.NewWorkflowService(workflowRepo, ruleRepo, terminalRepo)
+	workflowService := service.NewWorkflowService(workflowRepo, ruleRepo, terminalRepo, namespaceRepo)
 
 	// Initialize handlers
 	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
@@ -79,6 +87,8 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 	ruleHandler := handlers.NewRuleHandler(ruleService)
 	terminalHandler := handlers.NewTerminalHandler(terminalService)
 	workflowHandler := handlers.NewWorkflowHandler(workflowService)
+	executionHandler := handlers.NewExecutionHandler(engine)
+	adminHandler := handlers.NewAdminHandler(engine)
 
 	// Create server instance first
 	server := &Server{
@@ -92,11 +102,16 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 		ruleHandler:      ruleHandler,
 		terminalHandler:  terminalHandler,
 		workflowHandler:  workflowHandler,
+		executionHandler: executionHandler,
+		adminHandler:     adminHandler,
 		address:          cfg.Server.GetServerAddress(),
 	}
 
 	// Health check endpoint (no authentication required)
 	router.GET("/health", server.healthCheck)
+
+	// Metrics endpoint (no authentication required)
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// API v1 routes with authentication
 	v1 := router.Group("/v1")
@@ -149,6 +164,18 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 			namespaces.GET("/:id/workflows/active", RequireAnyRole("admin", "viewer", "executor"), workflowHandler.ListActiveWorkflows)
 			namespaces.GET("/:id/workflows/:workflowId/versions", RequireAnyRole("admin", "viewer", "executor"), workflowHandler.ListWorkflowVersions)
 		}
+
+		// Execution API
+		execute := v1.Group("/execute")
+		{
+			execute.POST("/namespaces/:namespace/workflows/:workflowId", RequireRole("executor"), executionHandler.ExecuteWorkflow)
+		}
+	}
+
+	// Admin routes (require admin role)
+	admin := router.Group("/admin")
+	{
+		admin.GET("/cache/stats/:namespace", RequireRole("admin"), adminHandler.GetCacheStats)
 	}
 
 	// Create HTTP server

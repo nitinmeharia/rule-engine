@@ -12,8 +12,8 @@ import (
 )
 
 const CreateFunction = `-- name: CreateFunction :exec
-INSERT INTO functions (namespace, function_id, version, status, type, args, values, created_by)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO functions (namespace, function_id, version, status, type, args, values, return_type, created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
 type CreateFunctionParams struct {
@@ -24,6 +24,7 @@ type CreateFunctionParams struct {
 	Type       *string  `json:"type"`
 	Args       []string `json:"args"`
 	Values     []string `json:"values"`
+	ReturnType *string  `json:"returnType"`
 	CreatedBy  string   `json:"createdBy"`
 }
 
@@ -36,6 +37,7 @@ func (q *Queries) CreateFunction(ctx context.Context, arg CreateFunctionParams) 
 		arg.Type,
 		arg.Args,
 		arg.Values,
+		arg.ReturnType,
 		arg.CreatedBy,
 	)
 	return err
@@ -433,7 +435,7 @@ func (q *Queries) PublishFunction(ctx context.Context, arg PublishFunctionParams
 
 const UpdateFunction = `-- name: UpdateFunction :exec
 UPDATE functions
-SET type = $4, args = $5, values = $6, created_by = $7
+SET type = $4, args = $5, values = $6, return_type = $7, created_by = $8
 WHERE namespace = $1 AND function_id = $2 AND version = $3
 `
 
@@ -444,6 +446,7 @@ type UpdateFunctionParams struct {
 	Type       *string  `json:"type"`
 	Args       []string `json:"args"`
 	Values     []string `json:"values"`
+	ReturnType *string  `json:"returnType"`
 	CreatedBy  string   `json:"createdBy"`
 }
 
@@ -455,6 +458,7 @@ func (q *Queries) UpdateFunction(ctx context.Context, arg UpdateFunctionParams) 
 		arg.Type,
 		arg.Args,
 		arg.Values,
+		arg.ReturnType,
 		arg.CreatedBy,
 	)
 	return err

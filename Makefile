@@ -33,9 +33,25 @@ clean: ## Clean build artifacts
 	@go clean
 
 # Development targets
+stop: ## Stop any running rule-engine processes
+	@echo "Stopping any running rule-engine processes..."
+	@pkill -f "go run.*cmd/api/main.go" || true
+	@pkill -f "rule-engine" || true
+	@echo "Stopped all rule-engine processes"
+
 run: ## Run the application locally
 	@echo "Running $(BINARY_NAME)..."
+	@make stop
+	@sleep 2
 	@go run cmd/api/main.go
+
+run-background: ## Run the application in background
+	@echo "Running $(BINARY_NAME) in background..."
+	@make stop
+	@sleep 2
+	@go run cmd/api/main.go > /dev/null 2>&1 &
+	@echo "Server started in background. PID: $$!"
+	@echo "Use 'make stop' to stop the server"
 
 dev-setup: ## Set up development environment
 	@echo "Setting up development environment..."
@@ -67,7 +83,9 @@ test-api: ## Run API tests (requires server to be running)
 test-api-e2e: ## Run full end-to-end API tests with server startup
 	@echo "Running end-to-end API tests..."
 	@echo "Starting server in background..."
-	@make run &
+	@make stop
+	@sleep 2
+	@go run cmd/api/main.go > /dev/null 2>&1 &
 	@SERVER_PID=$$!
 	@sleep 5
 	@echo "Server started with PID: $$SERVER_PID"
@@ -75,6 +93,7 @@ test-api-e2e: ## Run full end-to-end API tests with server startup
 	@./scripts/test-api-e2e.sh
 	@echo "Stopping server..."
 	@kill $$SERVER_PID || true
+	@make stop
 	@echo "API tests completed"
 
 test-api-quick: ## Run quick API tests (health and basic auth only)

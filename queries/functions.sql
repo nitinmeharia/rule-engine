@@ -1,6 +1,6 @@
 -- name: CreateFunction :exec
-INSERT INTO functions (namespace, function_id, version, status, type, args, values, created_by)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+INSERT INTO functions (namespace, function_id, version, status, type, args, values, return_type, created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
 
 -- name: GetFunction :one
 SELECT namespace, function_id, version, status, type, args, values, created_by, published_by, created_at, published_at
@@ -37,7 +37,7 @@ ORDER BY version DESC;
 
 -- name: UpdateFunction :exec
 UPDATE functions
-SET type = $4, args = $5, values = $6, created_by = $7
+SET type = $4, args = $5, values = $6, return_type = $7, created_by = $8
 WHERE namespace = $1 AND function_id = $2 AND version = $3;
 
 -- name: PublishFunction :exec
