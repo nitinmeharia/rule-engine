@@ -11,6 +11,13 @@ cache:
   refreshIntervalSec: 60
   refreshJitterSec: 10
 
+cache_refresh:
+  enabled: true
+  polling_interval: 60s
+  circuit_breaker:
+    max_failures: 5
+    timeout: 300s
+
 jwt:
   # SECRET MUST BE SET VIA ENVIRONMENT VARIABLE: RULE_ENGINE_JWT_SECRET
   tokenExpiration: 8h  # Shorter expiration in production

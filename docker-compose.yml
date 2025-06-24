@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: rule-engine-db
+    environment:
+      POSTGRES_DB: rule_engine
+      POSTGRES_USER: rule_engine
+      POSTGRES_PASSWORD: rule_engine_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rule_engine -d rule_engine"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rule-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rule-engine-api
+    environment:
+      - RULE_ENGINE_DATABASE__HOST=postgres
+      - RULE_ENGINE_DATABASE__PORT=5432
+      - RULE_ENGINE_DATABASE__NAME=rule_engine
+      - RULE_ENGINE_DATABASE__USER=rule_engine
+      - RULE_ENGINE_DATABASE__PASSWORD=rule_engine_password
+      - RULE_ENGINE_SERVER__PORT=8080
+      - RULE_ENGINE_SERVER__HOST=0.0.0.0
+      - RULE_ENGINE_CACHE__REFRESH_INTERVAL=30s
+      - RULE_ENGINE_CACHE__STALE_THRESHOLD=5m
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./configs:/app/configs:ro
+    restart: unless-stopped
+
+volumes:
+  postgres_data: 

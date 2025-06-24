@@ -27,11 +27,22 @@ func New(cfg config.LoggerConfig) (*Logger, error) {
 	}
 	zerolog.SetGlobalLevel(level)
 
-	// Configure output format
+	// Configure output writer
 	var writer io.Writer = os.Stdout
+
+	// If LogPath is specified, use file-based logging
+	if cfg.LogPath != "" {
+		file, err := os.OpenFile(cfg.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open log file %s: %w", cfg.LogPath, err)
+		}
+		writer = file
+	}
+
+	// Configure output format
 	if strings.ToLower(cfg.Format) == "console" {
 		writer = zerolog.ConsoleWriter{
-			Out:        os.Stdout,
+			Out:        writer,
 			TimeFormat: getTimeFormat(cfg.TimeFormat),
 		}
 	}

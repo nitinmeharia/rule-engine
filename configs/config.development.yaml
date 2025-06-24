@@ -34,12 +34,19 @@ cache:
     recoveryTimeout: 60s
     maxRequests: 10
 
+cache_refresh:
+  enabled: true
+  polling_interval: 10s
+  circuit_breaker:
+    max_failures: 2
+    timeout: 30s
+
 jwt:
   secret: "dev-secret-key-change-in-production"
   tokenExpiration: 24h
-  requiredClaims: ["sub", "exp"]
-  validAudiences: ["rule-engine"]
-  validIssuers: ["auth-service"]
+  requiredClaims: ["clientId", "role"]
+  validAudiences: []
+  validIssuers: []
   skipExpiryCheck: false
 
 metrics:
@@ -53,4 +60,5 @@ logger:
   level: "debug"
   format: "console"
   enableCaller: true
-  timeFormat: "2006-01-02T15:04:05Z07:00" 
+  timeFormat: "2006-01-02T15:04:05Z07:00"
+  logPath: "rule-engine-dev.log" 

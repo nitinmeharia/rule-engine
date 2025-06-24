@@ -389,7 +389,7 @@ func TestNamespaceRepository_GetByID(t *testing.T) {
 		result, err := repo.GetByID(ctx, "non-existent")
 
 		assert.Error(t, err)
-		assert.Equal(t, domain.ErrNotFound, err)
+		assert.Equal(t, sql.ErrNoRows, err)
 		assert.Nil(t, result)
 		mockQueries.AssertExpectations(t)
 	})
@@ -403,7 +403,7 @@ func TestNamespaceRepository_GetByID(t *testing.T) {
 		result, err := repo.GetByID(ctx, "error-ns")
 
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get namespace")
+		assert.Equal(t, sql.ErrConnDone, err)
 		assert.Nil(t, result)
 		mockQueries.AssertExpectations(t)
 	})

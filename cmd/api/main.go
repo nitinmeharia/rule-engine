@@ -13,10 +13,12 @@ import (
 	"github.com/rule-engine/internal/bootstrap"
 )
 
+// Version is set at build time using -ldflags
+var Version = "dev"
+
 const (
 	// Application metadata
-	appName    = "rule-engine"
-	appVersion = "1.0.0"
+	appName = "rule-engine"
 )
 
 func main() {
@@ -26,49 +28,39 @@ func main() {
 
 	log.Info().
 		Str("app", appName).
-		Str("version", appVersion).
+		Str("version", Version).
 		Msg("Starting Generic Rule Engine")
 
 	// Initialize application
-	app, err := bootstrap.Init()
+	app, err := bootstrap.Init(Version)
 	if err != nil {
 		log.Fatal().
 			Err(err).
 			Msg("Failed to initialize application")
 	}
 
-	// Start HTTP server in a goroutine
-	serverErrChan := make(chan error, 1)
-	go func() {
-		log.Info().
-			Int("port", app.Config.Server.Port).
-			Msg("Starting HTTP server")
+	// Create context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-		if err := app.Server.Start(); err != nil {
-			serverErrChan <- fmt.Errorf("server failed to start: %w", err)
+	// Start application components
+	appErrChan := make(chan error, 1)
+	go func() {
+		if err := app.Start(ctx); err != nil {
+			appErrChan <- fmt.Errorf("application failed to start: %w", err)
 		}
-	}()
-
-	// Start cache refresh loop in a goroutine
-	cacheCtx, cancelCache := context.WithCancel(context.Background())
-	go func() {
-		log.Info().
-			Int("interval_seconds", app.Config.Cache.RefreshIntervalSec).
-			Msg("Starting cache refresh loop")
-
-		app.ExecutionService.StartRefreshLoop(cacheCtx)
 	}()
 
 	// Set up signal handling for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
-	// Wait for either server error or shutdown signal
+	// Wait for either application error or shutdown signal
 	select {
-	case err := <-serverErrChan:
+	case err := <-appErrChan:
 		log.Error().
 			Err(err).
-			Msg("Server error occurred")
+			Msg("Application error occurred")
 		os.Exit(1)
 
 	case sig := <-signalChan:
@@ -77,28 +69,27 @@ func main() {
 			Msg("Shutdown signal received")
 
 		// Initiate graceful shutdown
-		gracefulShutdown(app, cancelCache)
+		gracefulShutdown(app, cancel)
 	}
 }
 
 // gracefulShutdown handles cleanup and shutdown procedures
-func gracefulShutdown(app *bootstrap.Application, cancelCache context.CancelFunc) {
+func gracefulShutdown(app *bootstrap.Application, cancel context.CancelFunc) {
 	log.Info().Msg("Starting graceful shutdown")
 
 	// Create shutdown context with timeout
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
 
-	// Stop cache refresh loop
-	log.Info().Msg("Stopping cache refresh loop")
-	cancelCache()
+	// Cancel the main context
+	cancel()
 
-	// Stop HTTP server
-	log.Info().Msg("Stopping HTTP server")
-	if err := app.Server.Stop(shutdownCtx); err != nil {
+	// Stop application components
+	log.Info().Msg("Stopping application components")
+	if err := app.Stop(shutdownCtx); err != nil {
 		log.Error().
 			Err(err).
-			Msg("Error during server shutdown")
+			Msg("Error during application shutdown")
 	}
 
 	// Close database connection
@@ -107,3 +98,6 @@ func gracefulShutdown(app *bootstrap.Application, cancelCache context.CancelFunc
 
 	log.Info().Msg("Graceful shutdown completed")
 }
+
+// To set the version at build time, use:
+// go build -ldflags "-X main.Version=$(git describe --tags --always --dirty)"

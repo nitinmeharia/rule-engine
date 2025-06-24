@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/rule-engine/internal/domain"
@@ -33,80 +32,73 @@ func NewNamespaceService(namespaceRepo domain.NamespaceRepository) *NamespaceSer
 
 // CreateNamespace creates a new namespace with validation
 func (s *NamespaceService) CreateNamespace(ctx context.Context, namespace *domain.Namespace) error {
-	// Validate namespace
-	if err := s.validateNamespace(namespace); err != nil {
-		return fmt.Errorf("validation failed: %w", err)
+	if err := namespace.Validate(); err != nil {
+		return err
 	}
 
 	// Check if namespace already exists
 	existing, err := s.namespaceRepo.GetByID(ctx, namespace.ID)
-	if err != nil && err != domain.ErrNotFound {
-		return fmt.Errorf("failed to check existing namespace: %w", err)
-	}
-	if existing != nil {
-		return domain.ErrAlreadyExists
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows in result set") {
+			// Namespace doesn't exist, proceed with creation
+		} else {
+			return domain.ErrInternalError
+		}
+	} else if existing != nil {
+		return domain.ErrNamespaceAlreadyExists
 	}
 
-	// Create namespace
 	return s.namespaceRepo.Create(ctx, namespace)
 }
 
 // GetNamespace retrieves a namespace by ID
 func (s *NamespaceService) GetNamespace(ctx context.Context, id string) (*domain.Namespace, error) {
-	if id == "" {
-		return nil, domain.ErrInvalidInput
+	if strings.TrimSpace(id) == "" {
+		return nil, domain.ErrInvalidNamespaceID
 	}
 
-	return s.namespaceRepo.GetByID(ctx, id)
+	namespace, err := s.namespaceRepo.GetByID(ctx, id)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows in result set") {
+			return nil, domain.ErrNamespaceNotFound
+		}
+		return nil, domain.ErrInternalError
+	}
+
+	return namespace, nil
 }
 
 // ListNamespaces retrieves all namespaces
 func (s *NamespaceService) ListNamespaces(ctx context.Context) ([]*domain.Namespace, error) {
-	return s.namespaceRepo.List(ctx)
+	namespaces, err := s.namespaceRepo.List(ctx)
+	if err != nil {
+		return nil, domain.ErrListError
+	}
+	return namespaces, nil
 }
 
 // DeleteNamespace deletes a namespace
 func (s *NamespaceService) DeleteNamespace(ctx context.Context, id string) error {
-	if id == "" {
-		return domain.ErrInvalidInput
+	if strings.TrimSpace(id) == "" {
+		return domain.ErrInvalidNamespaceID
 	}
 
 	// Check if namespace exists
 	existing, err := s.namespaceRepo.GetByID(ctx, id)
 	if err != nil {
-		return err
+		if strings.Contains(err.Error(), "no rows in result set") {
+			return domain.ErrNamespaceNotFound
+		}
+		return domain.ErrInternalError
 	}
+
 	if existing == nil {
-		return domain.ErrNotFound
+		return domain.ErrNamespaceNotFound
 	}
 
-	return s.namespaceRepo.Delete(ctx, id)
-}
-
-// validateNamespace validates namespace input
-func (s *NamespaceService) validateNamespace(namespace *domain.Namespace) error {
-	if namespace == nil {
-		return domain.ErrInvalidInput
-	}
-
-	if namespace.ID == "" {
-		return fmt.Errorf("namespace ID is required: %w", domain.ErrValidation)
-	}
-
-	if len(namespace.ID) > 50 {
-		return fmt.Errorf("namespace ID too long (max 50 characters): %w", domain.ErrValidation)
-	}
-
-	if !isValidNamespaceID(namespace.ID) {
-		return fmt.Errorf("namespace ID must contain only alphanumeric characters, hyphens, and underscores: %w", domain.ErrValidation)
-	}
-
-	if namespace.CreatedBy == "" {
-		return fmt.Errorf("createdBy is required: %w", domain.ErrValidation)
-	}
-
-	if len(namespace.Description) > 500 {
-		return fmt.Errorf("description too long (max 500 characters): %w", domain.ErrValidation)
+	// Delete the namespace and wrap any error
+	if err := s.namespaceRepo.Delete(ctx, id); err != nil {
+		return domain.ErrInternalError
 	}
 
 	return nil

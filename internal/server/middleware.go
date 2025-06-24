@@ -53,7 +53,7 @@ func ErrorRecoveryMiddleware() gin.HandlerFunc {
 				Str("path", c.Request.URL.Path).
 				Str("client_ip", c.ClientIP()).
 				Str("stack_trace", getStackTrace()).
-				Msg("Panic recovered")
+				Msg("Panic recovered - string error")
 		} else if err, ok := recovered.(error); ok {
 			log.Error().
 				Str("error", err.Error()).
@@ -61,7 +61,7 @@ func ErrorRecoveryMiddleware() gin.HandlerFunc {
 				Str("path", c.Request.URL.Path).
 				Str("client_ip", c.ClientIP()).
 				Str("stack_trace", getStackTrace()).
-				Msg("Panic recovered")
+				Msg("Panic recovered - error type")
 		} else {
 			log.Error().
 				Str("error", fmt.Sprintf("%v", recovered)).
@@ -69,7 +69,7 @@ func ErrorRecoveryMiddleware() gin.HandlerFunc {
 				Str("path", c.Request.URL.Path).
 				Str("client_ip", c.ClientIP()).
 				Str("stack_trace", getStackTrace()).
-				Msg("Panic recovered")
+				Msg("Panic recovered - unknown type")
 		}
 
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -164,6 +164,9 @@ func ContextLoggingMiddleware() gin.HandlerFunc {
 		ctx := context.WithValue(c.Request.Context(), "request_id", requestID)
 		c.Request = c.Request.WithContext(ctx)
 
+		// Add request ID to Gin context
+		c.Set("request_id", requestID)
+
 		// Add request ID to response headers
 		c.Header("X-Request-ID", requestID)
 
@@ -207,6 +210,45 @@ func DatabaseErrorMiddleware() gin.HandlerFunc {
 					Str("stack_trace", getStackTrace()).
 					Msg("Request error")
 			}
+		}
+	}
+}
+
+// DebugErrorMiddleware logs detailed error information for debugging
+func DebugErrorMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().
+					Interface("panic", r).
+					Str("method", c.Request.Method).
+					Str("path", c.Request.URL.Path).
+					Str("stack_trace", getStackTrace()).
+					Msg("DEBUG: Panic caught in debug middleware")
+				panic(r) // Re-panic to let the recovery middleware handle it
+			}
+		}()
+
+		c.Next()
+
+		// Check for errors after processing
+		if len(c.Errors) > 0 {
+			for _, err := range c.Errors {
+				log.Error().
+					Str("error", err.Error()).
+					Str("method", c.Request.Method).
+					Str("path", c.Request.URL.Path).
+					Msg("DEBUG: Error found in context")
+			}
+		}
+
+		// Log response status if it's an error
+		if c.Writer.Status() >= 400 {
+			log.Error().
+				Int("status", c.Writer.Status()).
+				Str("method", c.Request.Method).
+				Str("path", c.Request.URL.Path).
+				Msg("DEBUG: Error response status")
 		}
 	}
 }

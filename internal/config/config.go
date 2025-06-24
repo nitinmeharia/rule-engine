@@ -7,13 +7,14 @@ import (
 
 // Config represents the complete application configuration
 type Config struct {
-	Environment string         `yaml:"environment" mapstructure:"environment"`
-	Server      ServerConfig   `yaml:"server" mapstructure:"server"`
-	Database    DatabaseConfig `yaml:"database" mapstructure:"database"`
-	Cache       CacheConfig    `yaml:"cache" mapstructure:"cache"`
-	JWT         JWTConfig      `yaml:"jwt" mapstructure:"jwt"`
-	Metrics     MetricsConfig  `yaml:"metrics" mapstructure:"metrics"`
-	Logger      LoggerConfig   `yaml:"logger" mapstructure:"logger"`
+	Environment  string             `yaml:"environment" mapstructure:"environment"`
+	Server       ServerConfig       `yaml:"server" mapstructure:"server"`
+	Database     DatabaseConfig     `yaml:"database" mapstructure:"database"`
+	Cache        CacheConfig        `yaml:"cache" mapstructure:"cache"`
+	CacheRefresh CacheRefreshConfig `yaml:"cache_refresh" mapstructure:"cache_refresh"`
+	JWT          JWTConfig          `yaml:"jwt" mapstructure:"jwt"`
+	Metrics      MetricsConfig      `yaml:"metrics" mapstructure:"metrics"`
+	Logger       LoggerConfig       `yaml:"logger" mapstructure:"logger"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -86,6 +87,7 @@ type LoggerConfig struct {
 	Format       string `yaml:"format" mapstructure:"format"` // json, console
 	EnableCaller bool   `yaml:"enableCaller" mapstructure:"enableCaller"`
 	TimeFormat   string `yaml:"timeFormat" mapstructure:"timeFormat"`
+	LogPath      string `yaml:"logPath" mapstructure:"logPath"` // file path for logs, empty for stdout
 }
 
 // RateLimitConfig holds rate limiting configuration
@@ -95,6 +97,19 @@ type RateLimitConfig struct {
 	PerUserRPM      int  `yaml:"perUserRPM" mapstructure:"perUserRPM"`
 	ExecutionRPM    int  `yaml:"executionRPM" mapstructure:"executionRPM"`
 	BurstMultiplier int  `yaml:"burstMultiplier" mapstructure:"burstMultiplier"`
+}
+
+// CacheRefreshConfig holds cache refresh loop configuration
+type CacheRefreshConfig struct {
+	Enabled         bool                 `yaml:"enabled" mapstructure:"enabled"`
+	PollingInterval time.Duration        `yaml:"polling_interval" mapstructure:"polling_interval"`
+	CircuitBreaker  CacheRefreshCBConfig `yaml:"circuit_breaker" mapstructure:"circuit_breaker"`
+}
+
+// CacheRefreshCBConfig holds circuit breaker configuration for cache refresh
+type CacheRefreshCBConfig struct {
+	MaxFailures int           `yaml:"max_failures" mapstructure:"max_failures"`
+	Timeout     time.Duration `yaml:"timeout" mapstructure:"timeout"`
 }
 
 // GetDatabaseURL returns the complete database connection URL
