@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rule-engine/internal/domain"
@@ -45,8 +46,7 @@ func (h *ExecutionHandler) ExecuteRule(c *gin.Context) {
 	// Execute rule
 	response, err := h.engine.ExecuteRule(c.Request.Context(), &req)
 	if err != nil {
-		statusCode, errorResp := h.mapError(err)
-		c.JSON(statusCode, errorResp)
+		h.responseHandler.MapDomainErrorToResponse(c, err)
 		return
 	}
 
@@ -76,30 +76,18 @@ func (h *ExecutionHandler) ExecuteWorkflow(c *gin.Context) {
 	// Execute workflow
 	response, err := h.engine.ExecuteWorkflow(c.Request.Context(), &req)
 	if err != nil {
-		statusCode, errorResp := h.mapError(err)
-		c.JSON(statusCode, errorResp)
+		h.responseHandler.MapDomainErrorToResponse(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, response)
 }
 
-// mapError maps domain errors to HTTP responses
-func (h *ExecutionHandler) mapError(err error) (int, interface{}) {
-	apiErr, ok := err.(*domain.APIError)
-	if ok {
-		return apiErr.HTTPStatus(), apiErr
-	}
-
-	// Fallback for non-APIError errors
-	return http.StatusInternalServerError, domain.ErrInternalError
-}
-
 // isExecutionError checks if error is an execution error
 func isExecutionError(err error) bool {
-	return err != nil && (contains(err.Error(), "execution failed") ||
-		contains(err.Error(), "evaluation failed") ||
-		contains(err.Error(), "step execution failed") ||
-		contains(err.Error(), "failed to parse") ||
-		contains(err.Error(), "unsupported"))
+	return err != nil && (strings.Contains(err.Error(), "execution failed") ||
+		strings.Contains(err.Error(), "evaluation failed") ||
+		strings.Contains(err.Error(), "step execution failed") ||
+		strings.Contains(err.Error(), "failed to parse") ||
+		strings.Contains(err.Error(), "unsupported"))
 }

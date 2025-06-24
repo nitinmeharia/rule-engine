@@ -51,18 +51,7 @@ func (h *FunctionHandler) CreateFunction(c *gin.Context) {
 
 	err := h.functionService.CreateFunction(c.Request.Context(), namespace, function)
 	if err != nil {
-		switch err {
-		case domain.ErrFunctionAlreadyExists:
-			h.responseHandler.Conflict(c, "Function already exists")
-		case domain.ErrInvalidFunctionID:
-			h.responseHandler.BadRequest(c, "Invalid function ID")
-		case domain.ErrInvalidFunctionType:
-			h.responseHandler.BadRequest(c, "Invalid function type")
-		case domain.ErrInvalidFunctionArgs:
-			h.responseHandler.BadRequest(c, "Invalid function arguments")
-		default:
-			h.responseHandler.InternalServerError(c, "Internal server error")
-		}
+		h.responseHandler.MapDomainErrorToResponse(c, err)
 		return
 	}
 
@@ -85,11 +74,7 @@ func (h *FunctionHandler) GetFunction(c *gin.Context) {
 
 	function, err := h.functionService.GetFunction(c.Request.Context(), namespace, functionID)
 	if err != nil {
-		if err == domain.ErrFunctionNotFound {
-			h.responseHandler.NotFound(c, "Function not found")
-		} else {
-			h.responseHandler.InternalServerError(c, "Internal server error")
-		}
+		h.responseHandler.MapDomainErrorToResponse(c, err)
 		return
 	}
 
@@ -107,7 +92,7 @@ func (h *FunctionHandler) ListFunctions(c *gin.Context) {
 
 	functions, err := h.functionService.ListFunctions(c.Request.Context(), namespace)
 	if err != nil {
-		h.responseHandler.InternalServerError(c, "Internal server error")
+		h.responseHandler.MapDomainErrorToResponse(c, err)
 		return
 	}
 
@@ -147,16 +132,7 @@ func (h *FunctionHandler) UpdateFunction(c *gin.Context) {
 
 	err := h.functionService.UpdateFunction(c.Request.Context(), namespace, functionID, function)
 	if err != nil {
-		switch err {
-		case domain.ErrFunctionNotFound:
-			h.responseHandler.NotFound(c, "Function not found")
-		case domain.ErrInvalidFunctionType:
-			h.responseHandler.BadRequest(c, "Invalid function type")
-		case domain.ErrInvalidFunctionArgs:
-			h.responseHandler.BadRequest(c, "Invalid function arguments")
-		default:
-			h.responseHandler.InternalServerError(c, "Internal server error")
-		}
+		h.responseHandler.MapDomainErrorToResponse(c, err)
 		return
 	}
 
@@ -185,18 +161,14 @@ func (h *FunctionHandler) PublishFunction(c *gin.Context) {
 
 	err := h.functionService.PublishFunction(c.Request.Context(), namespace, functionID, clientID.(string))
 	if err != nil {
-		if err == domain.ErrFunctionNotFound {
-			h.responseHandler.NotFound(c, "Function not found")
-		} else {
-			h.responseHandler.InternalServerError(c, "Internal server error")
-		}
+		h.responseHandler.MapDomainErrorToResponse(c, err)
 		return
 	}
 
 	// Get the published function to return in response
 	function, err := h.functionService.GetFunction(c.Request.Context(), namespace, functionID)
 	if err != nil {
-		h.responseHandler.InternalServerError(c, "Internal server error")
+		h.responseHandler.MapDomainErrorToResponse(c, err)
 		return
 	}
 

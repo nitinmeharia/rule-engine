@@ -134,16 +134,14 @@ func TestNamespaceService_CreateNamespace(t *testing.T) {
 			CreatedBy:   "user1",
 		}
 
-		// The current validation regex allows hyphens, so this will pass validation and call GetByID
-		// Let's mock it to simulate the namespace doesn't exist, then it should create successfully
-		mockRepo.On("GetByID", ctx, "-test-ns").Return((*domain.Namespace)(nil), sql.ErrNoRows)
-		mockRepo.On("Create", ctx, namespace).Return(nil)
-
 		err := service.CreateNamespace(ctx, namespace)
 
-		// Since the current validation doesn't check for leading hyphens, this should succeed
-		assert.NoError(t, err)
-		mockRepo.AssertExpectations(t)
+		assert.Error(t, err)
+		apiErr, ok := err.(*domain.APIError)
+		assert.True(t, ok)
+		assert.Equal(t, "INVALID_NAMESPACE_ID", apiErr.Code)
+		mockRepo.AssertNotCalled(t, "GetByID")
+		mockRepo.AssertNotCalled(t, "Create")
 	})
 
 	t.Run("validation error - empty createdBy", func(t *testing.T) {

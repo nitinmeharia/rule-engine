@@ -22,11 +22,15 @@ type FieldServiceInterface interface {
 }
 
 type FieldHandler struct {
-	fieldService FieldServiceInterface
+	fieldService    FieldServiceInterface
+	responseHandler *ResponseHandler
 }
 
 func NewFieldHandler(fieldService FieldServiceInterface) *FieldHandler {
-	return &FieldHandler{fieldService: fieldService}
+	return &FieldHandler{
+		fieldService:    fieldService,
+		responseHandler: NewResponseHandler(),
+	}
 }
 
 // CreateFieldRequest represents the request body for creating a field
@@ -54,44 +58,33 @@ func (h *FieldHandler) ListFields(c *gin.Context) {
 
 	fields, err := h.fieldService.ListFields(c.Request.Context(), namespace)
 	if err != nil {
-		apiErr, ok := err.(*domain.APIError)
-		if ok {
-			c.JSON(apiErr.HTTPStatus(), apiErr)
-		} else {
-			c.JSON(http.StatusInternalServerError, domain.ErrListError)
-		}
+		h.responseHandler.MapDomainErrorToResponse(c, err)
 		return
 	}
 
-	// Convert to response format as per API spec
-	var response []gin.H
+	// Convert to response format using ResponseHandler
+	var response []domain.FieldResponse
 	for _, field := range fields {
-		response = append(response, gin.H{
-			"fieldId":     field.FieldID,
-			"type":        field.Type,
-			"description": field.Description,
-			"createdAt":   field.CreatedAt,
-			"createdBy":   field.CreatedBy,
-		})
+		response = append(response, h.responseHandler.ConvertFieldToResponse(field))
 	}
 
-	c.JSON(http.StatusOK, response)
+	h.responseHandler.OK(c, response)
 }
 
 // CreateField POST /v1/namespaces/{id}/fields
 func (h *FieldHandler) CreateField(c *gin.Context) {
 	namespace := c.Param("id")
 
-	var req CreateFieldRequest
+	var req domain.CreateFieldRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, domain.ErrValidationError)
+		h.responseHandler.BadRequest(c, "Invalid request body")
 		return
 	}
 
 	// Get createdBy from JWT context
 	createdBy, exists := c.Get("client_id")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, domain.ErrInternalError)
+		h.responseHandler.Unauthorized(c, "Client ID not found")
 		return
 	}
 
@@ -104,32 +97,19 @@ func (h *FieldHandler) CreateField(c *gin.Context) {
 
 	err := h.fieldService.CreateField(c.Request.Context(), namespace, field)
 	if err != nil {
-		apiErr, ok := err.(*domain.APIError)
-		if ok {
-			c.JSON(apiErr.HTTPStatus(), apiErr)
-		} else {
-			c.JSON(http.StatusInternalServerError, domain.ErrInternalError)
-		}
+		h.responseHandler.MapDomainErrorToResponse(c, err)
 		return
 	}
 
 	// Get the created field to return in response
 	createdField, err := h.fieldService.GetField(c.Request.Context(), namespace, req.FieldID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, domain.ErrInternalError)
+		h.responseHandler.MapDomainErrorToResponse(c, err)
 		return
 	}
 
-	response := CreateFieldResponse{
-		Success: true,
-	}
-	response.Field.FieldID = createdField.FieldID
-	response.Field.Type = createdField.Type
-	response.Field.Description = createdField.Description
-	response.Field.CreatedAt = createdField.CreatedAt
-	response.Field.CreatedBy = createdField.CreatedBy
-
-	c.JSON(http.StatusCreated, response)
+	response := h.responseHandler.ConvertFieldToResponse(createdField)
+	h.responseHandler.Created(c, response)
 }
 
 type mockFieldService struct{ mock.Mock }
