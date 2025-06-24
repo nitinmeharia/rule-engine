@@ -27,7 +27,7 @@ func (h *ResponseHandler) Success(c *gin.Context, statusCode int, data interface
 func (h *ResponseHandler) Error(c *gin.Context, statusCode int, code, message string) {
 	c.JSON(statusCode, domain.ErrorResponse{
 		Code:    code,
-		Error:   http.StatusText(statusCode),
+		Error:   code,
 		Message: message,
 	})
 }
@@ -202,7 +202,7 @@ func (h *ResponseHandler) ConvertFunctionToResponse(function *domain.Function) d
 
 // ConvertFunctionsToResponse converts a slice of domain Functions to FunctionResponse slice
 func (h *ResponseHandler) ConvertFunctionsToResponse(functions []*domain.Function) []domain.FunctionResponse {
-	var response []domain.FunctionResponse
+	response := make([]domain.FunctionResponse, 0, len(functions))
 	for _, function := range functions {
 		response = append(response, h.ConvertFunctionToResponse(function))
 	}
@@ -226,7 +226,7 @@ func (h *ResponseHandler) ConvertRuleToResponse(rule *domain.Rule) domain.RuleRe
 
 // ConvertRulesToResponse converts a slice of domain Rules to RuleResponse slice
 func (h *ResponseHandler) ConvertRulesToResponse(rules []*domain.Rule) []domain.RuleResponse {
-	var response []domain.RuleResponse
+	response := make([]domain.RuleResponse, 0, len(rules))
 	for _, rule := range rules {
 		response = append(response, h.ConvertRuleToResponse(rule))
 	}

@@ -9,12 +9,27 @@ import (
 	"github.com/rule-engine/internal/domain"
 )
 
+// RuleServiceInterface defines the interface for rule service operations
+type RuleServiceInterface interface {
+	CreateRule(ctx context.Context, namespace string, rule *domain.Rule) error
+	GetRule(ctx context.Context, namespace, ruleID string) (*domain.Rule, error)
+	GetDraftRule(ctx context.Context, namespace, ruleID string) (*domain.Rule, error)
+	ListRules(ctx context.Context, namespace string) ([]*domain.Rule, error)
+	ListRuleVersions(ctx context.Context, namespace, ruleID string) ([]*domain.Rule, error)
+	UpdateRule(ctx context.Context, namespace, ruleID string, rule *domain.Rule) error
+	PublishRule(ctx context.Context, namespace, ruleID, publishedBy string) error
+	DeleteRule(ctx context.Context, namespace, ruleID string, version int32) error
+}
+
 // RuleService handles business logic for rules
 type RuleService struct {
 	repo         domain.RuleRepository
 	functionRepo domain.FunctionRepository
 	fieldRepo    domain.FieldRepository
 }
+
+// Ensure RuleService implements RuleServiceInterface
+var _ RuleServiceInterface = (*RuleService)(nil)
 
 // NewRuleService creates a new rule service
 func NewRuleService(repo domain.RuleRepository, functionRepo domain.FunctionRepository, fieldRepo domain.FieldRepository) *RuleService {

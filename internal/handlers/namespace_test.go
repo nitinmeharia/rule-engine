@@ -123,7 +123,7 @@ func TestNamespaceHandler_CreateNamespace(t *testing.T) {
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody: map[string]interface{}{
 				"code":    "INTERNAL_SERVER_ERROR",
-				"error":   "Internal Server Error",
+				"error":   "INTERNAL_SERVER_ERROR",
 				"message": "An unexpected error occurred",
 			},
 		},
@@ -222,8 +222,8 @@ func TestNamespaceHandler_GetNamespace(t *testing.T) {
 			},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody: map[string]interface{}{
-				"error":   "Bad Request",
 				"code":    "BAD_REQUEST",
+				"error":   "BAD_REQUEST",
 				"message": "Namespace ID is required",
 			},
 		},
@@ -235,7 +235,7 @@ func TestNamespaceHandler_GetNamespace(t *testing.T) {
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody: map[string]interface{}{
-				"error":   "Internal Server Error",
+				"error":   "INTERNAL_SERVER_ERROR",
 				"code":    "INTERNAL_SERVER_ERROR",
 				"message": "An unexpected error occurred",
 			},
@@ -340,7 +340,7 @@ func TestNamespaceHandler_ListNamespaces(t *testing.T) {
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody: map[string]interface{}{
-				"error":   "Internal Server Error",
+				"error":   "INTERNAL_SERVER_ERROR",
 				"code":    "INTERNAL_SERVER_ERROR",
 				"message": "An unexpected error occurred",
 			},
@@ -414,8 +414,8 @@ func TestNamespaceHandler_DeleteNamespace(t *testing.T) {
 			},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody: map[string]interface{}{
-				"error":   "Bad Request",
 				"code":    "BAD_REQUEST",
+				"error":   "BAD_REQUEST",
 				"message": "Namespace ID is required",
 			},
 		},
@@ -440,7 +440,7 @@ func TestNamespaceHandler_DeleteNamespace(t *testing.T) {
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody: map[string]interface{}{
-				"error":   "Internal Server Error",
+				"error":   "INTERNAL_SERVER_ERROR",
 				"code":    "INTERNAL_SERVER_ERROR",
 				"message": "An unexpected error occurred",
 			},

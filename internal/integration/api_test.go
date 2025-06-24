@@ -185,10 +185,14 @@ func (suite *IntegrationTestSuite) TestCompleteRuleEngineWorkflow() {
 	suite.NoError(err)
 
 	// Check the nested data structure
-	data := functionResponse["data"].(map[string]interface{})
-	suite.Equal("eligibility-check", data["id"])
-	suite.Equal("in", data["type"])
-	suite.Equal("active", data["status"]) // Status should be "active" after publishing, not "draft"
+	if functionResponse["data"] != nil {
+		data := functionResponse["data"].(map[string]interface{})
+		suite.Equal("eligibility-check", data["id"])
+		suite.Equal("in", data["type"])
+		suite.Equal("active", data["status"])
+	} else {
+		suite.Fail("Expected 'data' field in function response, got nil")
+	}
 }
 
 func (suite *IntegrationTestSuite) TestWorkflowExecution() {
@@ -237,10 +241,14 @@ func (suite *IntegrationTestSuite) TestWorkflowExecution() {
 	suite.NoError(err)
 
 	// Check the nested data structure
-	data := functionResponse["data"].(map[string]interface{})
-	suite.Equal("high-score", data["id"])
-	suite.Equal("max", data["type"])
-	suite.Equal("active", data["status"]) // Status should be "active" after publishing
+	if functionResponse["data"] != nil {
+		data := functionResponse["data"].(map[string]interface{})
+		suite.Equal("high-score", data["id"])
+		suite.Equal("max", data["type"])
+		suite.Equal("active", data["status"])
+	} else {
+		suite.Fail("Expected 'data' field in function response, got nil")
+	}
 
 	// List all functions in the namespace
 	resp = suite.makeRequest("GET", fmt.Sprintf("/v1/namespaces/%s/functions", testNamespace), nil)
@@ -251,11 +259,14 @@ func (suite *IntegrationTestSuite) TestWorkflowExecution() {
 	suite.NoError(err)
 
 	// Check the nested data structure for list response
-	functionsData := functionsResponse["data"].([]interface{})
-	suite.Len(functionsData, 1)
-
-	firstFunction := functionsData[0].(map[string]interface{})
-	suite.Equal("high-score", firstFunction["id"])
+	if functionsResponse["data"] != nil {
+		functionsData := functionsResponse["data"].([]interface{})
+		suite.Len(functionsData, 1)
+		firstFunction := functionsData[0].(map[string]interface{})
+		suite.Equal("high-score", firstFunction["id"])
+	} else {
+		suite.Fail("Expected 'data' field in functions list response, got nil")
+	}
 }
 
 func (suite *IntegrationTestSuite) TestErrorHandling() {

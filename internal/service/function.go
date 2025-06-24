@@ -8,10 +8,22 @@ import (
 	"github.com/rule-engine/internal/domain"
 )
 
+// FunctionServiceInterface defines the interface for function service operations
+type FunctionServiceInterface interface {
+	CreateFunction(ctx context.Context, namespace string, function *domain.Function) error
+	GetFunction(ctx context.Context, namespace, functionID string) (*domain.Function, error)
+	ListFunctions(ctx context.Context, namespace string) ([]*domain.Function, error)
+	UpdateFunction(ctx context.Context, namespace, functionID string, function *domain.Function) error
+	PublishFunction(ctx context.Context, namespace, functionID, clientID string) error
+}
+
 // FunctionService handles business logic for functions
 type FunctionService struct {
 	repo domain.FunctionRepository
 }
+
+// Ensure FunctionService implements FunctionServiceInterface
+var _ FunctionServiceInterface = (*FunctionService)(nil)
 
 // NewFunctionService creates a new function service
 func NewFunctionService(repo domain.FunctionRepository) *FunctionService {

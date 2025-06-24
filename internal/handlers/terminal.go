@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/rule-engine/internal/domain"
 	"github.com/rule-engine/internal/service"
@@ -36,7 +38,7 @@ func (h *TerminalHandler) CreateTerminal(c *gin.Context) {
 
 	// Get client ID from context
 	createdBy, exists := c.Get("client_id")
-	if !exists {
+	if !exists || createdBy == nil {
 		h.responseHandler.Unauthorized(c, "Client ID not found")
 		return
 	}
@@ -53,7 +55,7 @@ func (h *TerminalHandler) CreateTerminal(c *gin.Context) {
 	}
 
 	response := h.responseHandler.ConvertTerminalToResponse(terminal)
-	h.responseHandler.Created(c, response)
+	c.JSON(http.StatusCreated, response)
 }
 
 // GetTerminal handles GET /v1/namespaces/{id}/terminals/{terminalId}
@@ -77,7 +79,7 @@ func (h *TerminalHandler) GetTerminal(c *gin.Context) {
 	}
 
 	response := h.responseHandler.ConvertTerminalToResponse(terminal)
-	h.responseHandler.OK(c, response)
+	c.JSON(http.StatusOK, response)
 }
 
 // ListTerminals handles GET /v1/namespaces/{id}/terminals
@@ -94,11 +96,11 @@ func (h *TerminalHandler) ListTerminals(c *gin.Context) {
 		return
 	}
 
-	var response []domain.TerminalResponse
+	response := make([]domain.TerminalResponse, 0, len(terminals))
 	for _, terminal := range terminals {
 		response = append(response, h.responseHandler.ConvertTerminalToResponse(terminal))
 	}
-	h.responseHandler.OK(c, response)
+	c.JSON(http.StatusOK, response)
 }
 
 // DeleteTerminal handles DELETE /v1/namespaces/{id}/terminals/{terminalId}

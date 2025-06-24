@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -10,12 +11,12 @@ import (
 
 // RuleHandler handles HTTP requests for rules
 type RuleHandler struct {
-	ruleService     *service.RuleService
+	ruleService     service.RuleServiceInterface
 	responseHandler *ResponseHandler
 }
 
 // NewRuleHandler creates a new rule handler
-func NewRuleHandler(ruleService *service.RuleService) *RuleHandler {
+func NewRuleHandler(ruleService service.RuleServiceInterface) *RuleHandler {
 	return &RuleHandler{
 		ruleService:     ruleService,
 		responseHandler: NewResponseHandler(),
@@ -38,7 +39,7 @@ func (h *RuleHandler) CreateRule(c *gin.Context) {
 
 	// Get client ID from context
 	clientID, exists := c.Get("client_id")
-	if !exists {
+	if !exists || clientID == nil {
 		h.responseHandler.Unauthorized(c, "Client ID not found")
 		return
 	}
@@ -60,7 +61,7 @@ func (h *RuleHandler) CreateRule(c *gin.Context) {
 		Status: "draft",
 		Rule:   h.responseHandler.ConvertRuleToResponse(rule),
 	}
-	h.responseHandler.Created(c, response)
+	c.JSON(http.StatusCreated, response)
 }
 
 // GetRule handles GET /v1/namespaces/{namespace}/rules/{ruleId}
@@ -80,7 +81,7 @@ func (h *RuleHandler) GetRule(c *gin.Context) {
 	}
 
 	response := h.responseHandler.ConvertRuleToResponse(rule)
-	h.responseHandler.OK(c, response)
+	c.JSON(http.StatusOK, response)
 }
 
 // GetDraftRule handles GET /v1/namespaces/{namespace}/rules/{ruleId}/versions/draft
@@ -100,7 +101,7 @@ func (h *RuleHandler) GetDraftRule(c *gin.Context) {
 	}
 
 	response := h.responseHandler.ConvertRuleToResponse(rule)
-	h.responseHandler.OK(c, response)
+	c.JSON(http.StatusOK, response)
 }
 
 // ListRules handles GET /v1/namespaces/{namespace}/rules
@@ -118,7 +119,7 @@ func (h *RuleHandler) ListRules(c *gin.Context) {
 	}
 
 	response := h.responseHandler.ConvertRulesToResponse(rules)
-	h.responseHandler.OK(c, response)
+	c.JSON(http.StatusOK, response)
 }
 
 // ListRuleVersions handles GET /v1/namespaces/{namespace}/rules/{ruleId}/history
@@ -138,7 +139,7 @@ func (h *RuleHandler) ListRuleVersions(c *gin.Context) {
 	}
 
 	response := h.responseHandler.ConvertRuleVersionsToResponse(rules)
-	h.responseHandler.OK(c, response)
+	c.JSON(http.StatusOK, response)
 }
 
 // UpdateRule handles PUT /v1/namespaces/{namespace}/rules/{ruleId}/versions/draft
@@ -159,7 +160,7 @@ func (h *RuleHandler) UpdateRule(c *gin.Context) {
 
 	// Get client ID from context
 	clientID, exists := c.Get("client_id")
-	if !exists {
+	if !exists || clientID == nil {
 		h.responseHandler.Unauthorized(c, "Client ID not found")
 		return
 	}
@@ -184,7 +185,7 @@ func (h *RuleHandler) UpdateRule(c *gin.Context) {
 	}
 
 	response := h.responseHandler.ConvertRuleToResponse(updatedRule)
-	h.responseHandler.OK(c, response)
+	c.JSON(http.StatusOK, response)
 }
 
 // PublishRule handles POST /v1/namespaces/{namespace}/rules/{ruleId}/publish
@@ -199,7 +200,7 @@ func (h *RuleHandler) PublishRule(c *gin.Context) {
 
 	// Get client ID from context
 	clientID, exists := c.Get("client_id")
-	if !exists {
+	if !exists || clientID == nil {
 		h.responseHandler.Unauthorized(c, "Client ID not found")
 		return
 	}
@@ -213,7 +214,7 @@ func (h *RuleHandler) PublishRule(c *gin.Context) {
 	response := domain.PublishRuleResponse{
 		Status: "active",
 	}
-	h.responseHandler.OK(c, response)
+	c.JSON(http.StatusOK, response)
 }
 
 // DeleteRule handles DELETE /v1/namespaces/{namespace}/rules/{ruleId}/versions/{version}
@@ -239,5 +240,5 @@ func (h *RuleHandler) DeleteRule(c *gin.Context) {
 		return
 	}
 
-	h.responseHandler.NoContent(c)
+	c.Status(http.StatusNoContent)
 }

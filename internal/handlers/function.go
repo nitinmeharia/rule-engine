@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/rule-engine/internal/domain"
 	"github.com/rule-engine/internal/service"
@@ -8,12 +10,12 @@ import (
 
 // FunctionHandler handles HTTP requests for functions
 type FunctionHandler struct {
-	functionService *service.FunctionService
+	functionService service.FunctionServiceInterface
 	responseHandler *ResponseHandler
 }
 
 // NewFunctionHandler creates a new function handler
-func NewFunctionHandler(functionService *service.FunctionService) *FunctionHandler {
+func NewFunctionHandler(functionService service.FunctionServiceInterface) *FunctionHandler {
 	return &FunctionHandler{
 		functionService: functionService,
 		responseHandler: NewResponseHandler(),
@@ -36,7 +38,7 @@ func (h *FunctionHandler) CreateFunction(c *gin.Context) {
 
 	// Get client ID from context
 	clientID, exists := c.Get("client_id")
-	if !exists {
+	if !exists || clientID == nil {
 		h.responseHandler.Unauthorized(c, "Client ID not found")
 		return
 	}
@@ -59,7 +61,7 @@ func (h *FunctionHandler) CreateFunction(c *gin.Context) {
 		Status:   "draft",
 		Function: h.responseHandler.ConvertFunctionToResponse(function),
 	}
-	h.responseHandler.Created(c, response)
+	c.JSON(http.StatusCreated, response)
 }
 
 // GetFunction handles GET /v1/namespaces/{namespace}/functions/{functionId}
@@ -118,7 +120,7 @@ func (h *FunctionHandler) UpdateFunction(c *gin.Context) {
 
 	// Get client ID from context
 	clientID, exists := c.Get("client_id")
-	if !exists {
+	if !exists || clientID == nil {
 		h.responseHandler.Unauthorized(c, "Client ID not found")
 		return
 	}
@@ -136,10 +138,17 @@ func (h *FunctionHandler) UpdateFunction(c *gin.Context) {
 		return
 	}
 
-	response := domain.UpdateFunctionResponse{
-		Function: h.responseHandler.ConvertFunctionToResponse(function),
+	// Get the updated function to return in response
+	updatedFunction, err := h.functionService.GetFunction(c.Request.Context(), namespace, functionID)
+	if err != nil {
+		h.responseHandler.MapDomainErrorToResponse(c, err)
+		return
 	}
-	h.responseHandler.OK(c, response)
+
+	response := domain.UpdateFunctionResponse{
+		Function: h.responseHandler.ConvertFunctionToResponse(updatedFunction),
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 // PublishFunction handles POST /v1/namespaces/{namespace}/functions/{functionId}/publish
@@ -154,7 +163,7 @@ func (h *FunctionHandler) PublishFunction(c *gin.Context) {
 
 	// Get client ID from context
 	clientID, exists := c.Get("client_id")
-	if !exists {
+	if !exists || clientID == nil {
 		h.responseHandler.Unauthorized(c, "Client ID not found")
 		return
 	}
