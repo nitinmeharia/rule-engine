@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Request DTOs
 type CreateNamespaceRequest struct {
@@ -25,6 +28,17 @@ type UpdateFunctionRequest struct {
 	Type   string   `json:"type" binding:"required"`
 	Args   []string `json:"args,omitempty"`
 	Values []string `json:"values,omitempty"`
+}
+
+type CreateRuleRequest struct {
+	ID         string          `json:"id" binding:"required"`
+	Logic      string          `json:"logic" binding:"required"`
+	Conditions json.RawMessage `json:"conditions" binding:"required"`
+}
+
+type UpdateRuleRequest struct {
+	Logic      string          `json:"logic" binding:"required"`
+	Conditions json.RawMessage `json:"conditions" binding:"required"`
 }
 
 // Response DTOs
@@ -55,6 +69,27 @@ type FunctionResponse struct {
 	CreatedBy   string     `json:"createdBy"`
 	PublishedAt *time.Time `json:"publishedAt,omitempty"`
 	PublishedBy *string    `json:"publishedBy,omitempty"`
+}
+
+type RuleResponse struct {
+	ID          string          `json:"id"`
+	Version     int32           `json:"version"`
+	Status      string          `json:"status"`
+	Logic       string          `json:"logic"`
+	Conditions  json.RawMessage `json:"conditions"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	CreatedBy   string          `json:"createdBy"`
+	PublishedAt *time.Time      `json:"publishedAt,omitempty"`
+	PublishedBy *string         `json:"publishedBy,omitempty"`
+}
+
+type CreateRuleResponse struct {
+	Status string       `json:"status"`
+	Rule   RuleResponse `json:"rule"`
+}
+
+type PublishRuleResponse struct {
+	Status string `json:"status"`
 }
 
 type CreateFunctionResponse struct {

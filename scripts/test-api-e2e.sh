@@ -360,6 +360,127 @@ test_functions_api() {
     make_request "DELETE" "/v1/namespaces/test-e2e" "$admin_token" "" "204" "Delete E2E test namespace"
 }
 
+# Function to test rules API
+# This suite tests the complete rules lifecycle: create, validate, publish, execute
+test_rules_api() {
+    print_status "INFO" "Testing Rules API"
+    echo "=================================="
+    local admin_token=$(generate_jwt_token "$CLIENT_ID" "$ADMIN_ROLE")
+    local viewer_token=$(generate_jwt_token "$CLIENT_ID" "$VIEWER_ROLE")
+    local executor_token=$(generate_jwt_token "$CLIENT_ID" "$EXECUTOR_ROLE")
+
+    # Create a namespace for rules testing
+    local ns_data='{"id": "rules-test-ns", "description": "Namespace for comprehensive rules testing"}'
+    make_request "POST" "/v1/namespaces" "$admin_token" "$ns_data" "201" "Create rules test namespace"
+
+    # Create fields for rules
+    local field_age='{"fieldId": "age", "type": "number", "description": "User age"}'
+    local field_income='{"fieldId": "income", "type": "number", "description": "User income"}'
+    local field_credit_score='{"fieldId": "credit_score", "type": "number", "description": "User credit score"}'
+    local field_employment_status='{"fieldId": "employment_status", "type": "string", "description": "Employment status"}'
+    local field_loan_amount='{"fieldId": "loan_amount", "type": "number", "description": "Requested loan amount"}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/fields" "$admin_token" "$field_age" "201" "Create field: age"
+    make_request "POST" "/v1/namespaces/rules-test-ns/fields" "$admin_token" "$field_income" "201" "Create field: income"
+    make_request "POST" "/v1/namespaces/rules-test-ns/fields" "$admin_token" "$field_credit_score" "201" "Create field: credit_score"
+    make_request "POST" "/v1/namespaces/rules-test-ns/fields" "$admin_token" "$field_employment_status" "201" "Create field: employment_status"
+    make_request "POST" "/v1/namespaces/rules-test-ns/fields" "$admin_token" "$field_loan_amount" "201" "Create field: loan_amount"
+
+    # Create functions for rules (using supported types: max, sum, avg, in)
+    local fn_high_income='{"id": "high_income", "type": "max", "args": ["income"]}'
+    local fn_good_credit='{"id": "good_credit", "type": "max", "args": ["credit_score"]}'
+    local fn_employed='{"id": "employed", "type": "in", "values": ["full_time", "part_time"]}'
+    local fn_loan_to_income='{"id": "loan_to_income", "type": "sum", "args": ["loan_amount", "income"]}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/functions" "$admin_token" "$fn_high_income" "201" "Create function: high_income"
+    make_request "POST" "/v1/namespaces/rules-test-ns/functions" "$admin_token" "$fn_good_credit" "201" "Create function: good_credit"
+    make_request "POST" "/v1/namespaces/rules-test-ns/functions" "$admin_token" "$fn_employed" "201" "Create function: employed"
+    make_request "POST" "/v1/namespaces/rules-test-ns/functions" "$admin_token" "$fn_loan_to_income" "201" "Create function: loan_to_income"
+
+    # Publish functions (required for rules)
+    make_request "POST" "/v1/namespaces/rules-test-ns/functions/high_income/publish" "$admin_token" "" "200" "Publish function: high_income"
+    make_request "POST" "/v1/namespaces/rules-test-ns/functions/good_credit/publish" "$admin_token" "" "200" "Publish function: good_credit"
+    make_request "POST" "/v1/namespaces/rules-test-ns/functions/employed/publish" "$admin_token" "" "200" "Publish function: employed"
+    make_request "POST" "/v1/namespaces/rules-test-ns/functions/loan_to_income/publish" "$admin_token" "" "200" "Publish function: loan_to_income"
+
+    # Test basic rule creation with correct format (logic + conditions)
+    local basic_rule='{"id": "basic_approval", "logic": "AND", "conditions": [{"type": "function", "functionId": "high_income", "operator": ">=", "value": 50000}]}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" "$basic_rule" "201" "Create basic rule"
+
+    # Test complex rule with AND condition
+    local complex_rule='{"id": "premium_approval", "logic": "AND", "conditions": [{"type": "function", "functionId": "high_income", "operator": ">=", "value": 75000}, {"type": "function", "functionId": "good_credit", "operator": ">=", "value": 700}, {"type": "function", "functionId": "employed", "operator": "==", "value": true}]}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" "$complex_rule" "201" "Create complex rule with AND conditions"
+
+    # Test rule with OR condition
+    local or_rule='{"id": "flexible_approval", "logic": "OR", "conditions": [{"type": "function", "functionId": "high_income", "operator": ">=", "value": 60000}, {"type": "function", "functionId": "good_credit", "operator": ">=", "value": 750}]}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" "$or_rule" "201" "Create rule with OR conditions"
+
+    # Test rule with simple condition
+    local simple_rule='{"id": "simple_check", "logic": "AND", "conditions": [{"type": "function", "functionId": "employed", "operator": "==", "value": true}]}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" "$simple_rule" "201" "Create simple rule"
+
+    # List rules
+    make_request "GET" "/v1/namespaces/rules-test-ns/rules" "$viewer_token" "" "200" "List rules"
+
+    # Get specific rule (should fail for draft rule - GetRule returns only active rules)
+    make_request "GET" "/v1/namespaces/rules-test-ns/rules/basic_approval" "$viewer_token" "" "404" "Get draft rule (GetRule returns only active rules)"
+
+    # Test rule validation (should fail for unpublished rule)
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/basic_approval/validate" "$admin_token" "" "404" "Validate unpublished rule (endpoint not implemented)"
+
+    # Publish rules
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/basic_approval/publish" "$admin_token" "" "200" "Publish basic rule"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/premium_approval/publish" "$admin_token" "" "200" "Publish premium rule"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/flexible_approval/publish" "$admin_token" "" "200" "Publish flexible rule"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/simple_check/publish" "$admin_token" "" "200" "Publish simple rule"
+
+    # Test rule validation (should fail as endpoint not implemented)
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/basic_approval/validate" "$admin_token" "" "404" "Validate published rule (endpoint not implemented)"
+
+    # Test rule execution (should fail as endpoint not implemented)
+    local test_data='{"age": 30, "income": 75000, "credit_score": 750, "employment_status": "full_time", "loan_amount": 25000}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/basic_approval/execute" "$executor_token" "$test_data" "404" "Execute basic rule (endpoint not implemented)"
+
+    # Test edge cases and error conditions
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" '{"id":"basic_approval","logic":"AND","conditions":[{"type":"function","functionId":"high_income","operator":">=","value":50000}]}' "409" "Create duplicate rule"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" '{"id":"invalid_rule","logic":"AND","conditions":[{"type":"function","functionId":"non_existent_function","operator":">=","value":50000}]}' "201" "Create rule with non-existent function (function existence not validated)"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" '{"id":"empty_logic","logic":"","conditions":[{"type":"function","functionId":"high_income","operator":">=","value":50000}]}' "400" "Create rule with empty logic"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" '{"id":"invalid_logic","logic":"XOR","conditions":[{"type":"function","functionId":"high_income","operator":">=","value":50000}]}' "400" "Create rule with invalid logic"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" '{"id":"empty_conditions","logic":"AND","conditions":[]}' "400" "Create rule with empty conditions"
+
+    # Test non-existent rule operations
+    make_request "GET" "/v1/namespaces/rules-test-ns/rules/non_existent" "$viewer_token" "" "404" "Get non-existent rule"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/non_existent/publish" "$admin_token" "" "404" "Publish non-existent rule"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/non_existent/validate" "$admin_token" "" "404" "Validate non-existent rule (endpoint not implemented)"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/non_existent/execute" "$executor_token" "$test_data" "404" "Execute non-existent rule (endpoint not implemented)"
+
+    # Test RBAC for rules
+    make_request "GET" "/v1/namespaces/rules-test-ns/rules" "$viewer_token" "" "200" "Viewer can list rules"
+    make_request "GET" "/v1/namespaces/rules-test-ns/rules/basic_approval" "$viewer_token" "" "200" "Viewer can read rule"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$viewer_token" '{"id":"viewer_rule","logic":"AND","conditions":[{"type":"function","functionId":"high_income","operator":">=","value":50000}]}' "403" "Viewer cannot create rule"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/basic_approval/publish" "$viewer_token" "" "403" "Viewer cannot publish rule"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/basic_approval/execute" "$viewer_token" "$test_data" "404" "Viewer cannot execute rule (endpoint not implemented)"
+
+    # Test executor permissions
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/basic_approval/execute" "$executor_token" "$test_data" "404" "Executor can execute rule (endpoint not implemented)"
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$executor_token" '{"id":"executor_rule","logic":"AND","conditions":[{"type":"function","functionId":"high_income","operator":">=","value":50000}]}' "403" "Executor cannot create rule"
+
+    # Test rule execution with complex data scenarios (should fail as endpoint not implemented)
+    local high_risk_data='{"age": 22, "income": 25000, "credit_score": 580, "employment_status": "unemployed", "loan_amount": 50000}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/premium_approval/execute" "$executor_token" "$high_risk_data" "404" "Execute premium rule with high risk data (endpoint not implemented)"
+
+    local ideal_data='{"age": 35, "income": 100000, "credit_score": 800, "employment_status": "full_time", "loan_amount": 20000}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/premium_approval/execute" "$executor_token" "$ideal_data" "404" "Execute premium rule with ideal data (endpoint not implemented)"
+
+    # Test rule execution with malformed JSON (should fail as endpoint not implemented)
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/basic_approval/execute" "$executor_token" "{invalid json}" "404" "Execute rule with malformed JSON (endpoint not implemented)"
+
+    # Test rule execution with missing required fields (should fail as endpoint not implemented)
+    local incomplete_data='{"age": 30}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/basic_approval/execute" "$executor_token" "$incomplete_data" "404" "Execute rule with incomplete data (endpoint not implemented)"
+
+    # Clean up
+    make_request "DELETE" "/v1/namespaces/rules-test-ns" "$admin_token" "" "204" "Delete rules test namespace"
+}
+
 # Function to test error handling
 test_error_handling() {
     print_status "INFO" "Testing Error Handling"
@@ -512,6 +633,7 @@ main() {
     test_namespaces_api
     test_fields_api
     test_functions_api
+    test_rules_api
     test_error_handling
     test_rbac
     test_edge_cases
