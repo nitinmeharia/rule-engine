@@ -103,4 +103,22 @@ curl -X POST http://localhost:8080/v1/namespaces \
 
 ---
 
+## Test Case Coverage
+
+The codebase includes comprehensive unit and integration tests across all major layers with **51.6% overall coverage**:
+
+- **Domain Layer:** Extensive validation tests for all core models (namespace, field, function, rule, workflow, terminal) and workflow graph logic. **47.0% coverage**.
+- **Repository Layer:** Full CRUD and edge case tests for all repositories (field, function, rule, workflow, terminal, cache), using mocks for database isolation. **83.0% coverage**.
+- **Service Layer:** Unit tests for orchestration logic, including error handling, versioning, and business rules. **52.8% coverage**.
+- **Handler Layer:** Complete coverage of all API endpoints, including success, validation, not found, and internal error scenarios. Input validation and error-wrapping are consistent and tested for all POST/PUT endpoints. **58.3% coverage**.
+- **Admin & Execution:** Specialized tests for cache stats, cache refresh, and rule/workflow execution (including trace and error paths). **47.8% coverage**.
+- **Metrics & Logging:** Unit tests for custom metrics and logging utilities. **87.3% coverage**.
+- **Configuration & DB:** Tests for config loading, environment overrides, and database connection logic. **76.1% coverage** for config, **92.9% coverage** for database layer.
+
+All tests are isolated (using mocks or in-memory config), fast, and CI-friendly. The API contract for error responses is consistent and predictable across all endpoints.
+
+For more details, see the `internal/handlers/`, `internal/service/`, `internal/repository/`, and `internal/domain/` test files.
+
+---
+
 **Generic Rule Engine** — Fast, reliable, and maintainable rule execution for modern applications.

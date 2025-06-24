@@ -1,21 +1,30 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rule-engine/internal/domain"
 	"github.com/rule-engine/internal/execution"
 )
 
+// EngineInterface defines the interface for the execution engine
+type EngineInterface interface {
+	GetCacheInfo(namespace string) (*execution.CacheInfo, error)
+	ExecuteRule(ctx context.Context, req *domain.ExecutionRequest) (*domain.ExecutionResponse, error)
+	ExecuteWorkflow(ctx context.Context, req *domain.ExecutionRequest) (*domain.ExecutionResponse, error)
+}
+
 // AdminHandler handles admin-only HTTP requests
 type AdminHandler struct {
-	engine          *execution.Engine
+	engine          EngineInterface
 	responseHandler *ResponseHandler
 }
 
 // NewAdminHandler creates a new admin handler
-func NewAdminHandler(engine *execution.Engine) *AdminHandler {
+func NewAdminHandler(engine EngineInterface) *AdminHandler {
 	return &AdminHandler{
 		engine:          engine,
 		responseHandler: NewResponseHandler(),

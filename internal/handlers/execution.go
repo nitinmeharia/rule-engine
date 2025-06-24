@@ -6,17 +6,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rule-engine/internal/domain"
-	"github.com/rule-engine/internal/execution"
 )
 
 // ExecutionHandler handles execution HTTP requests
 type ExecutionHandler struct {
-	engine          *execution.Engine
+	engine          EngineInterface
 	responseHandler *ResponseHandler
 }
 
 // NewExecutionHandler creates a new execution handler
-func NewExecutionHandler(engine *execution.Engine) *ExecutionHandler {
+func NewExecutionHandler(engine EngineInterface) *ExecutionHandler {
 	return &ExecutionHandler{
 		engine:          engine,
 		responseHandler: NewResponseHandler(),
@@ -37,6 +36,12 @@ func (h *ExecutionHandler) ExecuteRule(c *gin.Context) {
 	// Set namespace and ruleID from URL
 	req.Namespace = namespace
 	req.RuleID = &ruleID
+
+	// Validate the request
+	if err := req.Validate(); err != nil {
+		h.responseHandler.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
 
 	// Check for trace parameter
 	if c.Query("trace") == "full" {
@@ -67,6 +72,12 @@ func (h *ExecutionHandler) ExecuteWorkflow(c *gin.Context) {
 	// Set namespace and workflowID from URL
 	req.Namespace = namespace
 	req.WorkflowID = &workflowID
+
+	// Validate the request
+	if err := req.Validate(); err != nil {
+		h.responseHandler.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
 
 	// Check for trace parameter
 	if c.Query("trace") == "full" {
