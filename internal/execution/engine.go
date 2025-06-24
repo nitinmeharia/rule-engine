@@ -80,7 +80,7 @@ func NewEngine(
 // ExecuteRule executes a specific rule
 func (e *Engine) ExecuteRule(ctx context.Context, req *domain.ExecutionRequest) (*domain.ExecutionResponse, error) {
 	if req.RuleID == nil {
-		return nil, domain.ErrInvalidInput
+		return nil, domain.ErrValidationError
 	}
 
 	// Ensure cache is fresh
@@ -97,7 +97,7 @@ func (e *Engine) ExecuteRule(ctx context.Context, req *domain.ExecutionRequest) 
 	// Find rule
 	rule, exists := config.Rules[*req.RuleID]
 	if !exists {
-		return nil, domain.ErrNotFound
+		return nil, domain.ErrRuleNotFound
 	}
 
 	// Create execution context
@@ -142,7 +142,7 @@ func (e *Engine) ExecuteRule(ctx context.Context, req *domain.ExecutionRequest) 
 // ExecuteWorkflow executes a workflow
 func (e *Engine) ExecuteWorkflow(ctx context.Context, req *domain.ExecutionRequest) (*domain.ExecutionResponse, error) {
 	if req.WorkflowID == nil {
-		return nil, domain.ErrInvalidInput
+		return nil, domain.ErrValidationError
 	}
 
 	// Ensure cache is fresh
@@ -159,7 +159,7 @@ func (e *Engine) ExecuteWorkflow(ctx context.Context, req *domain.ExecutionReque
 	// Find workflow
 	workflow, exists := config.Workflows[*req.WorkflowID]
 	if !exists {
-		return nil, domain.ErrNotFound
+		return nil, domain.ErrWorkflowNotFound
 	}
 
 	// Create execution context
@@ -477,7 +477,7 @@ func (e *Engine) ensureFreshCache(ctx context.Context, namespace string) error {
 func (e *Engine) refreshNamespaceCache(ctx context.Context, namespace string) error {
 	// Get current checksum
 	currentChecksum, err := e.cacheRepo.GetActiveConfigChecksum(ctx, namespace)
-	if err != nil && err != domain.ErrNotFound {
+	if err != nil && err != domain.ErrNamespaceNotFound {
 		return fmt.Errorf("failed to get current checksum: %w", err)
 	}
 
@@ -520,7 +520,7 @@ func (e *Engine) loadNamespaceConfig(ctx context.Context, namespace string) (*Na
 
 	// Load fields
 	fields, err := e.fieldRepo.List(ctx, namespace)
-	if err != nil {
+	if err != nil && err != domain.ErrRuleNotFound && err != domain.ErrWorkflowNotFound {
 		return nil, fmt.Errorf("failed to load fields: %w", err)
 	}
 	for _, field := range fields {
@@ -529,7 +529,7 @@ func (e *Engine) loadNamespaceConfig(ctx context.Context, namespace string) (*Na
 
 	// Load active functions
 	functions, err := e.functionRepo.ListActive(ctx, namespace)
-	if err != nil {
+	if err != nil && err != domain.ErrRuleNotFound && err != domain.ErrWorkflowNotFound {
 		return nil, fmt.Errorf("failed to load functions: %w", err)
 	}
 	for _, function := range functions {
@@ -538,7 +538,7 @@ func (e *Engine) loadNamespaceConfig(ctx context.Context, namespace string) (*Na
 
 	// Load active rules
 	rules, err := e.ruleRepo.ListActive(ctx, namespace)
-	if err != nil {
+	if err != nil && err != domain.ErrRuleNotFound && err != domain.ErrWorkflowNotFound {
 		return nil, fmt.Errorf("failed to load rules: %w", err)
 	}
 	for _, rule := range rules {
@@ -547,7 +547,7 @@ func (e *Engine) loadNamespaceConfig(ctx context.Context, namespace string) (*Na
 
 	// Load active workflows
 	workflows, err := e.workflowRepo.ListActive(ctx, namespace)
-	if err != nil {
+	if err != nil && err != domain.ErrRuleNotFound && err != domain.ErrWorkflowNotFound {
 		return nil, fmt.Errorf("failed to load workflows: %w", err)
 	}
 	for _, workflow := range workflows {
@@ -556,7 +556,7 @@ func (e *Engine) loadNamespaceConfig(ctx context.Context, namespace string) (*Na
 
 	// Load terminals
 	terminals, err := e.terminalRepo.List(ctx, namespace)
-	if err != nil {
+	if err != nil && err != domain.ErrRuleNotFound && err != domain.ErrWorkflowNotFound {
 		return nil, fmt.Errorf("failed to load terminals: %w", err)
 	}
 	for _, terminal := range terminals {
@@ -573,8 +573,24 @@ func (e *Engine) getNamespaceConfig(namespace string) (*NamespaceConfig, error) 
 
 	config, exists := e.cache.data[namespace]
 	if !exists {
-		return nil, domain.ErrNotFound
+		return nil, domain.ErrNamespaceNotFound
 	}
 
 	return config, nil
+}
+
+func (e *Engine) validateWorkflow(workflow *domain.Workflow) error {
+	if workflow == nil {
+		return domain.ErrValidationError
+	}
+	// ... rest of validation logic
+	return nil
+}
+
+func (e *Engine) validateRule(rule *domain.Rule) error {
+	if rule == nil {
+		return domain.ErrValidationError
+	}
+	// ... rest of validation logic
+	return nil
 }

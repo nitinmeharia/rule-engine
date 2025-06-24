@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rule-engine/internal/auth"
 	"github.com/rule-engine/internal/domain"
 	"github.com/rule-engine/internal/service"
 )
@@ -25,10 +25,16 @@ func NewNamespaceHandler(namespaceService service.NamespaceServiceInterface) *Na
 // CreateNamespaceRequest represents the request body for creating a namespace
 type CreateNamespaceRequest struct {
 	ID          string `json:"id" binding:"required"`
-	Description string `json:"description"`
+	Description string `json:"description" binding:"required"`
 }
 
-// NamespaceResponse represents a namespace response
+// CreateNamespaceResponse represents the response for creating a namespace
+type CreateNamespaceResponse struct {
+	Success   bool              `json:"success"`
+	Namespace NamespaceResponse `json:"namespace"`
+}
+
+// NamespaceResponse represents a namespace in API responses
 type NamespaceResponse struct {
 	ID          string    `json:"id"`
 	Description string    `json:"description"`
@@ -47,64 +53,48 @@ type ErrorResponse struct {
 func (h *NamespaceHandler) CreateNamespace(c *gin.Context) {
 	var req CreateNamespaceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid request body",
-			Code:  "INVALID_REQUEST",
-			Details: map[string]interface{}{
-				"validation": err.Error(),
-			},
-		})
+		c.JSON(http.StatusBadRequest, domain.ErrValidationError)
 		return
 	}
 
-	// Get clientId from JWT context
-	createdBy := auth.GetClientID(c)
-	if createdBy == "" {
-		c.JSON(http.StatusUnauthorized, ErrorResponse{
-			Error: "Missing client ID",
-			Code:  "MISSING_CLIENT_ID",
-		})
+	// Get createdBy from JWT context
+	createdBy, exists := c.Get("client_id")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, domain.ErrInternalError)
 		return
 	}
 
 	namespace := &domain.Namespace{
 		ID:          req.ID,
 		Description: req.Description,
-		CreatedBy:   createdBy,
-		CreatedAt:   time.Now(),
+		CreatedBy:   createdBy.(string),
 	}
 
 	err := h.namespaceService.CreateNamespace(c.Request.Context(), namespace)
 	if err != nil {
-		if err == domain.ErrAlreadyExists {
-			c.JSON(http.StatusConflict, ErrorResponse{
-				Error: "Namespace already exists",
-				Code:  "ALREADY_EXISTS",
-			})
-			return
-		}
-
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error: "Internal server error",
-			Code:  "INTERNAL_ERROR",
-		})
+		statusCode, errorResp := h.mapError(err)
+		c.JSON(statusCode, errorResp)
 		return
 	}
 
-	// Fetch the created namespace to get the actual database values
-	createdNamespace, err := h.namespaceService.GetNamespace(c.Request.Context(), namespace.ID)
+	// Get the created namespace to return in response
+	createdNamespace, err := h.namespaceService.GetNamespace(c.Request.Context(), req.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error: "Internal server error",
-			Code:  "INTERNAL_ERROR",
-		})
+		c.JSON(http.StatusInternalServerError, domain.ErrInternalError)
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"success":   true,
-		"namespace": createdNamespace,
-	})
+	response := CreateNamespaceResponse{
+		Success: true,
+		Namespace: NamespaceResponse{
+			ID:          createdNamespace.ID,
+			Description: createdNamespace.Description,
+			CreatedAt:   createdNamespace.CreatedAt,
+			CreatedBy:   createdNamespace.CreatedBy,
+		},
+	}
+
+	c.JSON(http.StatusCreated, response)
 }
 
 // GetNamespace retrieves a namespace by ID
@@ -118,7 +108,7 @@ func (h *NamespaceHandler) GetNamespace(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, h.toNamespaceResponse(namespace))
+	c.JSON(http.StatusOK, namespace)
 }
 
 // ListNamespaces retrieves all namespaces
@@ -162,62 +152,38 @@ func (h *NamespaceHandler) toNamespaceResponse(namespace *domain.Namespace) Name
 	}
 }
 
-// mapError maps domain errors to HTTP responses
-func (h *NamespaceHandler) mapError(err error) (int, ErrorResponse) {
-	switch err {
-	case domain.ErrNotFound:
-		return http.StatusNotFound, ErrorResponse{
-			Error: "Namespace not found",
-			Code:  "NAMESPACE_NOT_FOUND",
-		}
-	case domain.ErrAlreadyExists:
-		return http.StatusConflict, ErrorResponse{
-			Error: "Namespace already exists",
-			Code:  "NAMESPACE_ALREADY_EXISTS",
-		}
-	case domain.ErrInvalidInput:
-		return http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid input",
-			Code:  "INVALID_INPUT",
-		}
-	case domain.ErrValidation:
-		return http.StatusBadRequest, ErrorResponse{
-			Error: "Validation failed",
-			Code:  "VALIDATION_ERROR",
-		}
-	case domain.ErrUnauthorized:
-		return http.StatusUnauthorized, ErrorResponse{
-			Error: "Unauthorized",
-			Code:  "UNAUTHORIZED",
-		}
-	case domain.ErrForbidden:
-		return http.StatusForbidden, ErrorResponse{
-			Error: "Forbidden",
-			Code:  "FORBIDDEN",
-		}
-	default:
-		// Check if it's a wrapped validation error
-		if isValidationError(err) {
-			return http.StatusBadRequest, ErrorResponse{
-				Error: err.Error(),
-				Code:  "VALIDATION_ERROR",
-			}
-		}
-
-		return http.StatusInternalServerError, ErrorResponse{
-			Error: "Internal server error",
-			Code:  "INTERNAL_ERROR",
-		}
+// mapError maps domain errors to appropriate HTTP responses
+func (h *NamespaceHandler) mapError(err error) (int, interface{}) {
+	apiErr, ok := err.(*domain.APIError)
+	if ok {
+		return apiErr.HTTPStatus(), apiErr
 	}
+
+	// Fallback for non-APIError errors
+	return http.StatusInternalServerError, domain.ErrInternalError
 }
 
-// isValidationError checks if error is a validation error
+// isValidationError checks if an error is a validation error
 func isValidationError(err error) bool {
-	return err != nil && (err == domain.ErrValidation ||
-		(err.Error() != "" && (contains(err.Error(), "validation failed") ||
-			contains(err.Error(), "required") ||
-			contains(err.Error(), "too long") ||
-			contains(err.Error(), "invalid"))))
+	if err == nil {
+		return false
+	}
+
+	// Check if it's an APIError with validation-related codes
+	if apiErr, ok := err.(*domain.APIError); ok {
+		return apiErr.Code == domain.ErrCodeValidationError ||
+			apiErr.Code == domain.ErrCodeInvalidNamespaceID ||
+			apiErr.Code == domain.ErrCodeInvalidFieldID ||
+			apiErr.Code == domain.ErrCodeInvalidDescription
+	}
+
+	// Fallback to string checking for non-APIError errors
+	errStr := err.Error()
+	return strings.Contains(errStr, "validation") ||
+		strings.Contains(errStr, "binding") ||
+		strings.Contains(errStr, "required") ||
+		strings.Contains(errStr, "too long") ||
+		strings.Contains(errStr, "invalid")
 }
 
 // contains checks if string contains substring

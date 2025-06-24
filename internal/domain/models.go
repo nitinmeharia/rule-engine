@@ -15,11 +15,12 @@ type Namespace struct {
 
 // Field represents a typed field definition used in rule conditions
 type Field struct {
-	Namespace string    `json:"namespace"`
-	FieldID   string    `json:"fieldId"`
-	Type      string    `json:"type"`
-	CreatedAt time.Time `json:"createdAt"`
-	CreatedBy string    `json:"createdBy"`
+	Namespace   string    `json:"namespace"`
+	FieldID     string    `json:"fieldId"`
+	Type        string    `json:"type"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"createdAt"`
+	CreatedBy   string    `json:"createdBy"`
 }
 
 // Function represents a built-in function available for rule evaluation
