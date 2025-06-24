@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/rule-engine/internal/domain"
 	"github.com/rule-engine/internal/models/db"
 )
@@ -97,6 +99,17 @@ func (r *FieldRepository) Exists(ctx context.Context, namespace, fieldID string)
 		FieldID:   fieldID,
 	})
 	return exists, err
+}
+
+func (r *FieldRepository) NamespaceExists(ctx context.Context, namespace string) (bool, error) {
+	ns, err := r.db.GetNamespace(ctx, namespace)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return ns != nil, nil
 }
 
 func derefString(s *string) string {
