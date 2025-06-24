@@ -13,10 +13,12 @@ import (
 	"github.com/rule-engine/internal/bootstrap"
 )
 
+// Version is set at build time using -ldflags
+var Version = "dev"
+
 const (
 	// Application metadata
-	appName    = "rule-engine"
-	appVersion = "1.0.0"
+	appName = "rule-engine"
 )
 
 func main() {
@@ -26,11 +28,11 @@ func main() {
 
 	log.Info().
 		Str("app", appName).
-		Str("version", appVersion).
+		Str("version", Version).
 		Msg("Starting Generic Rule Engine")
 
 	// Initialize application
-	app, err := bootstrap.Init()
+	app, err := bootstrap.Init(Version)
 	if err != nil {
 		log.Fatal().
 			Err(err).
@@ -96,3 +98,6 @@ func gracefulShutdown(app *bootstrap.Application, cancel context.CancelFunc) {
 
 	log.Info().Msg("Graceful shutdown completed")
 }
+
+// To set the version at build time, use:
+// go build -ldflags "-X main.Version=$(git describe --tags --always --dirty)"

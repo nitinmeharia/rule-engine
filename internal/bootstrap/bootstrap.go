@@ -28,7 +28,7 @@ type Application struct {
 }
 
 // Init initializes the application with all dependencies
-func Init() (*Application, error) {
+func Init(version string) (*Application, error) {
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -84,7 +84,7 @@ func Init() (*Application, error) {
 	)
 
 	// Initialize HTTP server
-	srv, err := server.New(cfg, database, log, engine)
+	srv, err := server.New(cfg, database, log, engine, version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize server: %w", err)
 	}

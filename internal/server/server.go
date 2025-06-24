@@ -34,10 +34,11 @@ type Server struct {
 	executionHandler *handlers.ExecutionHandler
 	adminHandler     *handlers.AdminHandler
 	address          string
+	version          string
 }
 
 // New creates a new HTTP server instance
-func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger, engine *execution.Engine) (*Server, error) {
+func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger, engine *execution.Engine, version string) (*Server, error) {
 	// Set Gin mode based on environment
 	if cfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
@@ -105,6 +106,7 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger, engine 
 		executionHandler: executionHandler,
 		adminHandler:     adminHandler,
 		address:          cfg.Server.GetServerAddress(),
+		version:          version,
 	}
 
 	// Health check endpoint (no authentication required)
@@ -218,13 +220,63 @@ func (s *Server) setupRoutes() {
 		// Namespace routes
 		namespaces := v1.Group("/namespaces")
 		{
-			namespaces.POST("", s.namespaceHandler.CreateNamespace)
-			namespaces.GET("", s.namespaceHandler.ListNamespaces)
-			namespaces.GET("/:id", s.namespaceHandler.GetNamespace)
-			namespaces.DELETE("/:id", s.namespaceHandler.DeleteNamespace)
+			namespaces.GET("", RequireAnyRole("admin", "viewer", "executor"), s.namespaceHandler.ListNamespaces)
+			namespaces.POST("", RequireRole("admin"), s.namespaceHandler.CreateNamespace)
+			namespaces.GET("/:id", RequireAnyRole("admin", "viewer", "executor"), s.namespaceHandler.GetNamespace)
+			namespaces.DELETE("/:id", RequireRole("admin"), s.namespaceHandler.DeleteNamespace)
+
+			// Field routes within namespace - nested under namespace ID
+			namespaces.GET("/:id/fields", RequireAnyRole("admin", "viewer", "executor"), s.fieldHandler.ListFields)
+			namespaces.POST("/:id/fields", RequireRole("admin"), s.fieldHandler.CreateField)
+
+			// Function routes within namespace - nested under namespace ID
+			namespaces.GET("/:id/functions", RequireAnyRole("admin", "viewer", "executor"), s.functionHandler.ListFunctions)
+			namespaces.POST("/:id/functions", RequireRole("admin"), s.functionHandler.CreateFunction)
+			namespaces.GET("/:id/functions/:functionId", RequireAnyRole("admin", "viewer", "executor"), s.functionHandler.GetFunction)
+			namespaces.PUT("/:id/functions/:functionId/versions/draft", RequireRole("admin"), s.functionHandler.UpdateFunction)
+			namespaces.POST("/:id/functions/:functionId/publish", RequireRole("admin"), s.functionHandler.PublishFunction)
+			namespaces.DELETE("/:id/functions/:functionId/versions/:version", RequireRole("admin"), s.functionHandler.DeleteFunction)
+
+			// Rule routes within namespace - nested under namespace ID
+			namespaces.GET("/:id/rules", RequireAnyRole("admin", "viewer", "executor"), s.ruleHandler.ListRules)
+			namespaces.POST("/:id/rules", RequireRole("admin"), s.ruleHandler.CreateRule)
+			namespaces.GET("/:id/rules/:ruleId", RequireAnyRole("admin", "viewer", "executor"), s.ruleHandler.GetRule)
+			namespaces.GET("/:id/rules/:ruleId/versions/draft", RequireAnyRole("admin", "viewer", "executor"), s.ruleHandler.GetDraftRule)
+			namespaces.PUT("/:id/rules/:ruleId/versions/draft", RequireRole("admin"), s.ruleHandler.UpdateRule)
+			namespaces.POST("/:id/rules/:ruleId/publish", RequireRole("admin"), s.ruleHandler.PublishRule)
+			namespaces.GET("/:id/rules/:ruleId/history", RequireAnyRole("admin", "viewer", "executor"), s.ruleHandler.ListRuleVersions)
+			namespaces.DELETE("/:id/rules/:ruleId/versions/:version", RequireRole("admin"), s.ruleHandler.DeleteRule)
+
+			// Terminal routes within namespace - nested under namespace ID
+			namespaces.GET("/:id/terminals", RequireAnyRole("admin", "viewer", "executor"), s.terminalHandler.ListTerminals)
+			namespaces.POST("/:id/terminals", RequireRole("admin"), s.terminalHandler.CreateTerminal)
+			namespaces.GET("/:id/terminals/:terminalId", RequireAnyRole("admin", "viewer", "executor"), s.terminalHandler.GetTerminal)
+			namespaces.DELETE("/:id/terminals/:terminalId", RequireRole("admin"), s.terminalHandler.DeleteTerminal)
+
+			// Workflow routes within namespace - nested under namespace ID
+			namespaces.GET("/:id/workflows", RequireAnyRole("admin", "viewer", "executor"), s.workflowHandler.ListWorkflows)
+			namespaces.POST("/:id/workflows", RequireRole("admin"), s.workflowHandler.CreateWorkflow)
+			namespaces.GET("/:id/workflows/:workflowId", RequireAnyRole("admin", "viewer", "executor"), s.workflowHandler.GetWorkflow)
+			namespaces.GET("/:id/workflows/:workflowId/versions/:version", RequireAnyRole("admin", "viewer", "executor"), s.workflowHandler.GetWorkflowVersion)
+			namespaces.PUT("/:id/workflows/:workflowId/versions/:version", RequireRole("admin"), s.workflowHandler.UpdateWorkflow)
+			namespaces.POST("/:id/workflows/:workflowId/versions/:version/publish", RequireRole("admin"), s.workflowHandler.PublishWorkflow)
+			namespaces.POST("/:id/workflows/:workflowId/deactivate", RequireRole("admin"), s.workflowHandler.DeactivateWorkflow)
+			namespaces.DELETE("/:id/workflows/:workflowId/versions/:version", RequireRole("admin"), s.workflowHandler.DeleteWorkflow)
+			namespaces.GET("/:id/workflows/active", RequireAnyRole("admin", "viewer", "executor"), s.workflowHandler.ListActiveWorkflows)
+			namespaces.GET("/:id/workflows/:workflowId/versions", RequireAnyRole("admin", "viewer", "executor"), s.workflowHandler.ListWorkflowVersions)
 		}
 
-		// TODO: Add other resource routes (fields, functions, rules, workflows, terminals)
+		// Execution API
+		execute := v1.Group("/execute")
+		{
+			execute.POST("/namespaces/:namespace/workflows/:workflowId", RequireRole("executor"), s.executionHandler.ExecuteWorkflow)
+		}
+	}
+
+	// Admin routes (require admin role)
+	admin := s.router.Group("/admin")
+	{
+		admin.GET("/cache/stats/:namespace", RequireRole("admin"), s.adminHandler.GetCacheStats)
 	}
 }
 
@@ -233,7 +285,7 @@ func (s *Server) healthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":    "healthy",
 		"timestamp": time.Now().UTC(),
-		"version":   "1.0.0", // TODO: Get from build info
+		"version":   s.version,
 	})
 }
 
