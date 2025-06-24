@@ -77,6 +77,85 @@ func (h *ResponseHandler) NoContent(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// MapDomainErrorToResponse maps domain errors to appropriate HTTP responses
+// This centralizes error handling and reduces boilerplate in handlers
+func (h *ResponseHandler) MapDomainErrorToResponse(c *gin.Context, err error) {
+	if err == nil {
+		return
+	}
+
+	// Check if it's a domain APIError
+	if apiErr, ok := err.(*domain.APIError); ok {
+		c.JSON(apiErr.HTTPStatus(), apiErr)
+		return
+	}
+
+	// Handle common domain errors
+	switch err {
+	case domain.ErrNamespaceAlreadyExists:
+		h.Conflict(c, "Namespace already exists")
+	case domain.ErrNamespaceNotFound:
+		h.NotFound(c, "Namespace not found")
+	case domain.ErrInvalidNamespaceID:
+		h.BadRequest(c, "Invalid namespace ID")
+	case domain.ErrInvalidDescription:
+		h.BadRequest(c, "Invalid description")
+	case domain.ErrFieldAlreadyExists:
+		h.Conflict(c, "Field already exists")
+	case domain.ErrFieldNotFound:
+		h.NotFound(c, "Field not found")
+	case domain.ErrInvalidFieldID:
+		h.BadRequest(c, "Invalid field ID")
+	case domain.ErrInvalidFieldType:
+		h.BadRequest(c, "Invalid field type")
+	case domain.ErrFunctionAlreadyExists:
+		h.Conflict(c, "Function already exists")
+	case domain.ErrFunctionNotFound:
+		h.NotFound(c, "Function not found")
+	case domain.ErrInvalidFunctionID:
+		h.BadRequest(c, "Invalid function ID")
+	case domain.ErrInvalidFunctionType:
+		h.BadRequest(c, "Invalid function type")
+	case domain.ErrInvalidFunctionArgs:
+		h.BadRequest(c, "Invalid function arguments")
+	case domain.ErrRuleAlreadyExists:
+		h.Conflict(c, "Rule already exists")
+	case domain.ErrRuleNotFound:
+		h.NotFound(c, "Rule not found")
+	case domain.ErrInvalidRuleID:
+		h.BadRequest(c, "Invalid rule ID")
+	case domain.ErrInvalidRuleLogic:
+		h.BadRequest(c, "Invalid rule logic")
+	case domain.ErrWorkflowAlreadyExists:
+		h.Conflict(c, "Workflow already exists")
+	case domain.ErrWorkflowNotFound:
+		h.NotFound(c, "Workflow not found")
+	case domain.ErrInvalidWorkflowID:
+		h.BadRequest(c, "Invalid workflow ID")
+	case domain.ErrTerminalAlreadyExists:
+		h.Conflict(c, "Terminal already exists")
+	case domain.ErrTerminalNotFound:
+		h.NotFound(c, "Terminal not found")
+	case domain.ErrInvalidTerminalID:
+		h.BadRequest(c, "Invalid terminal ID")
+	case domain.ErrValidationError:
+		h.BadRequest(c, "Validation error")
+	case domain.ErrPreconditionFailed:
+		c.JSON(http.StatusPreconditionFailed, domain.ErrorResponse{
+			Code:    "PRECONDITION_FAILED",
+			Error:   "Precondition Failed",
+			Message: "Precondition failed",
+		})
+	case domain.ErrInternalError:
+		h.InternalServerError(c, "Internal server error")
+	case domain.ErrListError:
+		h.InternalServerError(c, "Failed to list resources")
+	default:
+		// Fallback for unknown errors
+		h.InternalServerError(c, "An unexpected error occurred")
+	}
+}
+
 // ConvertNamespaceToResponse converts a domain Namespace to NamespaceResponse
 func (h *ResponseHandler) ConvertNamespaceToResponse(namespace *domain.Namespace) domain.NamespaceResponse {
 	return domain.NamespaceResponse{

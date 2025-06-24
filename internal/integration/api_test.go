@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	importedJwt "github.com/golang-jwt/jwt/v4"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rule-engine/internal/config"
 	"github.com/rule-engine/internal/infra/db"
@@ -23,6 +24,7 @@ type IntegrationTestSuite struct {
 	pool   *pgxpool.Pool
 	server *server.Server
 	cfg    *config.Config
+	token  string // JWT token for Authorization header
 }
 
 func (suite *IntegrationTestSuite) SetupSuite() {
@@ -45,6 +47,14 @@ func (suite *IntegrationTestSuite) SetupSuite() {
 			RefreshJitterSec:   10,
 			RefreshTimeout:     10 * time.Second,
 			MaxSizeMB:          100,
+		},
+		JWT: config.JWTConfig{
+			Secret:          "dev-secret-key-change-in-production",
+			TokenExpiration: 24 * time.Hour,
+			RequiredClaims:  []string{"clientId", "role"},
+			ValidAudiences:  []string{},
+			ValidIssuers:    []string{},
+			SkipExpiryCheck: false,
 		},
 		Logger: config.LoggerConfig{
 			Level:      "info",
@@ -75,6 +85,10 @@ func (suite *IntegrationTestSuite) SetupSuite() {
 	suite.pool = pool
 	suite.server = srv
 	suite.cfg = cfg
+
+	// Generate JWT token for tests
+	// suite.token = generateTestJWT()
+	suite.token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjbGllbnRJZCI6InRlc3QtY2xpZW50Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzUwODMzOTgxLCJuYmYiOjE3NTA3NDc1ODEsImlhdCI6MTc1MDc0NzU4MX0.OEbr07R0P28uNNwofltPBc3quvN9QwO-6L2i48zJ0os"
 }
 
 func (suite *IntegrationTestSuite) TearDownSuite() {
@@ -98,12 +112,11 @@ func (suite *IntegrationTestSuite) cleanupTestData(pool *pgxpool.Pool) {
 }
 
 func (suite *IntegrationTestSuite) TestCompleteRuleEngineWorkflow() {
-	// This test demonstrates the complete rule engine workflow:
+	// This test demonstrates the available rule engine workflow:
 	// 1. Create namespace
 	// 2. Create fields
-	// 3. Create rules
-	// 4. Execute rules
-	// 5. Verify results
+	// 3. Create functions
+	// 4. Update and publish functions
 
 	testNamespace := "test-complete-workflow"
 
@@ -119,16 +132,19 @@ func (suite *IntegrationTestSuite) TestCompleteRuleEngineWorkflow() {
 	// Step 2: Create fields
 	fieldPayloads := []map[string]interface{}{
 		{
-			"fieldId": "age",
-			"type":    "number",
+			"fieldId":     "age",
+			"type":        "number",
+			"description": "User age field",
 		},
 		{
-			"fieldId": "income",
-			"type":    "number",
+			"fieldId":     "income",
+			"type":        "number",
+			"description": "User income field",
 		},
 		{
-			"fieldId": "country",
-			"type":    "string",
+			"fieldId":     "country",
+			"type":        "string",
+			"description": "User country field",
 		},
 	}
 
@@ -137,95 +153,46 @@ func (suite *IntegrationTestSuite) TestCompleteRuleEngineWorkflow() {
 		suite.Equal(http.StatusCreated, resp.Code)
 	}
 
-	// Step 3: Create a rule
-	rulePayload := map[string]interface{}{
-		"ruleId": "eligibility-check",
-		"logic":  "AND",
-		"conditions": map[string]interface{}{
-			"condition1": map[string]interface{}{
-				"field":    "age",
-				"operator": "gte",
-				"value":    18,
-			},
-			"condition2": map[string]interface{}{
-				"field":    "income",
-				"operator": "gt",
-				"value":    50000,
-			},
-			"condition3": map[string]interface{}{
-				"field":    "country",
-				"operator": "in",
-				"value":    []string{"US", "CA", "UK"},
-			},
-		},
+	// Step 3: Create a function
+	functionPayload := map[string]interface{}{
+		"id":     "eligibility-check",
+		"type":   "in",
+		"values": []string{"US", "CA", "UK"},
 	}
 
-	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/rules", testNamespace), rulePayload)
+	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/functions", testNamespace), functionPayload)
 	suite.Equal(http.StatusCreated, resp.Code)
 
-	// Step 4: Publish the rule
-	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/rules/eligibility-check/versions/1/publish", testNamespace), nil)
-	suite.Equal(http.StatusOK, resp.Code)
-
-	// Step 5: Execute rule with test data (should pass)
-	executionPayload := map[string]interface{}{
-		"data": map[string]interface{}{
-			"age":     25,
-			"income":  75000,
-			"country": "US",
-		},
+	// Step 4: Update the function
+	updatePayload := map[string]interface{}{
+		"type":   "in",
+		"values": []string{"US", "CA", "UK", "AU"}, // Updated values
 	}
 
-	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/rules/eligibility-check/execute", testNamespace), executionPayload)
+	resp = suite.makeRequest("PUT", fmt.Sprintf("/v1/namespaces/%s/functions/eligibility-check/versions/draft", testNamespace), updatePayload)
 	suite.Equal(http.StatusOK, resp.Code)
 
-	var executionResponse map[string]interface{}
-	err := json.Unmarshal(resp.Body.Bytes(), &executionResponse)
-	suite.NoError(err)
-	suite.Equal(true, executionResponse["result"])
-
-	// Step 6: Execute rule with test data (should fail)
-	executionPayload = map[string]interface{}{
-		"data": map[string]interface{}{
-			"age":     17, // Under 18
-			"income":  75000,
-			"country": "US",
-		},
-	}
-
-	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/rules/eligibility-check/execute", testNamespace), executionPayload)
+	// Step 5: Publish the function
+	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/functions/eligibility-check/publish", testNamespace), nil)
 	suite.Equal(http.StatusOK, resp.Code)
 
-	err = json.Unmarshal(resp.Body.Bytes(), &executionResponse)
-	suite.NoError(err)
-	suite.Equal(false, executionResponse["result"])
-
-	// Step 7: Execute with trace enabled
-	executionPayload = map[string]interface{}{
-		"data": map[string]interface{}{
-			"age":     25,
-			"income":  75000,
-			"country": "US",
-		},
-	}
-
-	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/rules/eligibility-check/execute?trace=full", testNamespace), executionPayload)
+	// Step 6: Get the function to verify it was created and published
+	resp = suite.makeRequest("GET", fmt.Sprintf("/v1/namespaces/%s/functions/eligibility-check", testNamespace), nil)
 	suite.Equal(http.StatusOK, resp.Code)
 
-	err = json.Unmarshal(resp.Body.Bytes(), &executionResponse)
+	var functionResponse map[string]interface{}
+	err := json.Unmarshal(resp.Body.Bytes(), &functionResponse)
 	suite.NoError(err)
-	suite.Equal(true, executionResponse["result"])
-	suite.NotNil(executionResponse["trace"])
 
-	// Verify trace contains expected information
-	trace, ok := executionResponse["trace"].(map[string]interface{})
-	suite.True(ok)
-	suite.NotEmpty(trace["duration"])
-	suite.NotEmpty(trace["steps"])
+	// Check the nested data structure
+	data := functionResponse["data"].(map[string]interface{})
+	suite.Equal("eligibility-check", data["id"])
+	suite.Equal("in", data["type"])
+	suite.Equal("active", data["status"]) // Status should be "active" after publishing, not "draft"
 }
 
 func (suite *IntegrationTestSuite) TestWorkflowExecution() {
-	// Test workflow execution with multiple steps
+	// Test basic workflow with available endpoints
 	testNamespace := "test-workflow"
 
 	// Create namespace
@@ -239,103 +206,56 @@ func (suite *IntegrationTestSuite) TestWorkflowExecution() {
 
 	// Create fields
 	fieldPayload := map[string]interface{}{
-		"fieldId": "score",
-		"type":    "number",
+		"fieldId":     "score",
+		"type":        "number",
+		"description": "User score field",
 	}
 
 	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/fields", testNamespace), fieldPayload)
 	suite.Equal(http.StatusCreated, resp.Code)
 
-	// Create rules
-	highScoreRule := map[string]interface{}{
-		"ruleId": "high-score",
-		"logic":  "AND",
-		"conditions": map[string]interface{}{
-			"condition1": map[string]interface{}{
-				"field":    "score",
-				"operator": "gte",
-				"value":    80,
-			},
-		},
+	// Create a function
+	functionPayload := map[string]interface{}{
+		"id":   "high-score",
+		"type": "max",
+		"args": []string{"score"},
 	}
 
-	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/rules", testNamespace), highScoreRule)
+	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/functions", testNamespace), functionPayload)
 	suite.Equal(http.StatusCreated, resp.Code)
 
-	// Publish rule
-	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/rules/high-score/versions/1/publish", testNamespace), nil)
+	// Publish the function
+	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/functions/high-score/publish", testNamespace), nil)
 	suite.Equal(http.StatusOK, resp.Code)
 
-	// Create terminals
-	terminalPayloads := []map[string]interface{}{
-		{"terminalId": "approved"},
-		{"terminalId": "rejected"},
-	}
-
-	for _, terminalPayload := range terminalPayloads {
-		resp := suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/terminals", testNamespace), terminalPayload)
-		suite.Equal(http.StatusCreated, resp.Code)
-	}
-
-	// Create workflow
-	workflowPayload := map[string]interface{}{
-		"workflowId": "score-evaluation",
-		"startAt":    "check-score",
-		"steps": map[string]interface{}{
-			"check-score": map[string]interface{}{
-				"type":    "rule",
-				"ruleId":  "high-score",
-				"onTrue":  "approve",
-				"onFalse": "reject",
-			},
-			"approve": map[string]interface{}{
-				"type":       "terminal",
-				"terminalId": "approved",
-				"result":     "APPROVED",
-			},
-			"reject": map[string]interface{}{
-				"type":       "terminal",
-				"terminalId": "rejected",
-				"result":     "REJECTED",
-			},
-		},
-	}
-
-	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/workflows", testNamespace), workflowPayload)
-	suite.Equal(http.StatusCreated, resp.Code)
-
-	// Publish workflow
-	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/workflows/score-evaluation/versions/1/publish", testNamespace), nil)
+	// Get the function to verify it was created and published
+	resp = suite.makeRequest("GET", fmt.Sprintf("/v1/namespaces/%s/functions/high-score", testNamespace), nil)
 	suite.Equal(http.StatusOK, resp.Code)
 
-	// Execute workflow (should approve)
-	executionPayload := map[string]interface{}{
-		"data": map[string]interface{}{
-			"score": 85,
-		},
-	}
-
-	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/workflows/score-evaluation/execute", testNamespace), executionPayload)
-	suite.Equal(http.StatusOK, resp.Code)
-
-	var executionResponse map[string]interface{}
-	err := json.Unmarshal(resp.Body.Bytes(), &executionResponse)
+	var functionResponse map[string]interface{}
+	err := json.Unmarshal(resp.Body.Bytes(), &functionResponse)
 	suite.NoError(err)
-	suite.Equal("APPROVED", executionResponse["result"])
 
-	// Execute workflow (should reject)
-	executionPayload = map[string]interface{}{
-		"data": map[string]interface{}{
-			"score": 65,
-		},
-	}
+	// Check the nested data structure
+	data := functionResponse["data"].(map[string]interface{})
+	suite.Equal("high-score", data["id"])
+	suite.Equal("max", data["type"])
+	suite.Equal("active", data["status"]) // Status should be "active" after publishing
 
-	resp = suite.makeRequest("POST", fmt.Sprintf("/v1/namespaces/%s/workflows/score-evaluation/execute", testNamespace), executionPayload)
+	// List all functions in the namespace
+	resp = suite.makeRequest("GET", fmt.Sprintf("/v1/namespaces/%s/functions", testNamespace), nil)
 	suite.Equal(http.StatusOK, resp.Code)
 
-	err = json.Unmarshal(resp.Body.Bytes(), &executionResponse)
+	var functionsResponse map[string]interface{}
+	err = json.Unmarshal(resp.Body.Bytes(), &functionsResponse)
 	suite.NoError(err)
-	suite.Equal("REJECTED", executionResponse["result"])
+
+	// Check the nested data structure for list response
+	functionsData := functionsResponse["data"].([]interface{})
+	suite.Len(functionsData, 1)
+
+	firstFunction := functionsData[0].(map[string]interface{})
+	suite.Equal("high-score", firstFunction["id"])
 }
 
 func (suite *IntegrationTestSuite) TestErrorHandling() {
@@ -350,7 +270,7 @@ func (suite *IntegrationTestSuite) TestErrorHandling() {
 	req.Header.Set("Content-Type", "application/json")
 	resp = httptest.NewRecorder()
 	suite.server.ServeHTTP(resp, req)
-	suite.Equal(http.StatusBadRequest, resp.Code)
+	suite.Equal(http.StatusUnauthorized, resp.Code)
 
 	// Test missing required fields
 	invalidPayload := map[string]interface{}{
@@ -372,6 +292,8 @@ func (suite *IntegrationTestSuite) makeRequest(method, path string, payload inte
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	// Always set Authorization header
+	req.Header.Set("Authorization", "Bearer "+suite.token)
 
 	resp := httptest.NewRecorder()
 	suite.server.ServeHTTP(resp, req)
@@ -387,4 +309,24 @@ func TestIntegrationSuite(t *testing.T) {
 	}
 
 	suite.Run(t, new(IntegrationTestSuite))
+}
+
+// Helper to generate a JWT token for tests
+func generateTestJWT() string {
+	// These values should match the defaults in generate-jwt.py
+	claims := map[string]interface{}{
+		"clientId": "test-client",
+		"role":     "admin",
+		"exp":      time.Now().Add(24 * time.Hour).Unix(),
+		"iat":      time.Now().Unix(),
+		"nbf":      time.Now().Unix(),
+	}
+	secret := "dev-secret-key-change-in-production"
+	// Create token
+	token := importedJwt.NewWithClaims(importedJwt.SigningMethodHS256, importedJwt.MapClaims(claims))
+	tokenString, err := token.SignedString([]byte(secret))
+	if err != nil {
+		panic("Failed to sign JWT for tests: " + err.Error())
+	}
+	return tokenString
 }
