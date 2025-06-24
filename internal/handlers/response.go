@@ -118,6 +118,8 @@ func (h *ResponseHandler) MapDomainErrorToResponse(c *gin.Context, err error) {
 		h.BadRequest(c, "Invalid function type")
 	case domain.ErrInvalidFunctionArgs:
 		h.BadRequest(c, "Invalid function arguments")
+	case domain.ErrFunctionNotActive:
+		h.BadRequest(c, "Function not active")
 	case domain.ErrRuleAlreadyExists:
 		h.Conflict(c, "Rule already exists")
 	case domain.ErrRuleNotFound:
@@ -126,6 +128,10 @@ func (h *ResponseHandler) MapDomainErrorToResponse(c *gin.Context, err error) {
 		h.BadRequest(c, "Invalid rule ID")
 	case domain.ErrInvalidRuleLogic:
 		h.BadRequest(c, "Invalid rule logic")
+	case domain.ErrInvalidRuleConditions:
+		h.BadRequest(c, "Invalid rule conditions")
+	case domain.ErrRuleNotActive:
+		h.BadRequest(c, "Rule not active")
 	case domain.ErrWorkflowAlreadyExists:
 		h.Conflict(c, "Workflow already exists")
 	case domain.ErrWorkflowNotFound:
@@ -201,4 +207,46 @@ func (h *ResponseHandler) ConvertFunctionsToResponse(functions []*domain.Functio
 		response = append(response, h.ConvertFunctionToResponse(function))
 	}
 	return response
+}
+
+// ConvertRuleToResponse converts a domain Rule to RuleResponse
+func (h *ResponseHandler) ConvertRuleToResponse(rule *domain.Rule) domain.RuleResponse {
+	return domain.RuleResponse{
+		ID:          rule.RuleID,
+		Version:     rule.Version,
+		Status:      rule.Status,
+		Logic:       rule.Logic,
+		Conditions:  rule.Conditions,
+		CreatedAt:   rule.CreatedAt,
+		CreatedBy:   rule.CreatedBy,
+		PublishedAt: rule.PublishedAt,
+		PublishedBy: rule.PublishedBy,
+	}
+}
+
+// ConvertRulesToResponse converts a slice of domain Rules to RuleResponse slice
+func (h *ResponseHandler) ConvertRulesToResponse(rules []*domain.Rule) []domain.RuleResponse {
+	var response []domain.RuleResponse
+	for _, rule := range rules {
+		response = append(response, h.ConvertRuleToResponse(rule))
+	}
+	return response
+}
+
+// ConvertRuleVersionsToResponse converts a slice of domain Rules to RuleResponse slice
+func (h *ResponseHandler) ConvertRuleVersionsToResponse(rules []*domain.Rule) []domain.RuleResponse {
+	response := make([]domain.RuleResponse, len(rules))
+	for i, rule := range rules {
+		response[i] = h.ConvertRuleToResponse(rule)
+	}
+	return response
+}
+
+// ConvertTerminalToResponse converts a domain Terminal to TerminalResponse
+func (h *ResponseHandler) ConvertTerminalToResponse(terminal *domain.Terminal) domain.TerminalResponse {
+	return domain.TerminalResponse{
+		TerminalID: terminal.TerminalID,
+		CreatedAt:  terminal.CreatedAt,
+		CreatedBy:  terminal.CreatedBy,
+	}
 }

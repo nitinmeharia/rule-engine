@@ -25,6 +25,8 @@ type Server struct {
 	namespaceHandler *handlers.NamespaceHandler
 	fieldHandler     *handlers.FieldHandler
 	functionHandler  *handlers.FunctionHandler
+	ruleHandler      *handlers.RuleHandler
+	terminalHandler  *handlers.TerminalHandler
 	address          string
 }
 
@@ -57,16 +59,22 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 	namespaceRepo := repository.NewNamespaceRepository(queries)
 	fieldRepo := repository.NewFieldRepository(queries)
 	functionRepo := repository.NewFunctionRepository(queries)
+	ruleRepo := repository.NewRuleRepository(queries)
+	terminalRepo := repository.NewTerminalRepository(queries)
 
 	// Initialize services
 	namespaceService := service.NewNamespaceService(namespaceRepo)
 	fieldService := service.NewFieldService(fieldRepo)
 	functionService := service.NewFunctionService(functionRepo)
+	ruleService := service.NewRuleService(ruleRepo, functionRepo, fieldRepo)
+	terminalService := service.NewTerminalService(terminalRepo, namespaceRepo)
 
 	// Initialize handlers
 	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
 	fieldHandler := handlers.NewFieldHandler(fieldService)
 	functionHandler := handlers.NewFunctionHandler(functionService)
+	ruleHandler := handlers.NewRuleHandler(ruleService)
+	terminalHandler := handlers.NewTerminalHandler(terminalService)
 
 	// Create server instance first
 	server := &Server{
@@ -77,6 +85,8 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 		namespaceHandler: namespaceHandler,
 		fieldHandler:     fieldHandler,
 		functionHandler:  functionHandler,
+		ruleHandler:      ruleHandler,
+		terminalHandler:  terminalHandler,
 		address:          cfg.Server.GetServerAddress(),
 	}
 
@@ -104,6 +114,22 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 			namespaces.GET("/:id/functions/:functionId", RequireAnyRole("admin", "viewer", "executor"), functionHandler.GetFunction)
 			namespaces.PUT("/:id/functions/:functionId/versions/draft", RequireRole("admin"), functionHandler.UpdateFunction)
 			namespaces.POST("/:id/functions/:functionId/publish", RequireRole("admin"), functionHandler.PublishFunction)
+
+			// Rule routes within namespace - nested under namespace ID
+			namespaces.GET("/:id/rules", RequireAnyRole("admin", "viewer", "executor"), ruleHandler.ListRules)
+			namespaces.POST("/:id/rules", RequireRole("admin"), ruleHandler.CreateRule)
+			namespaces.GET("/:id/rules/:ruleId", RequireAnyRole("admin", "viewer", "executor"), ruleHandler.GetRule)
+			namespaces.GET("/:id/rules/:ruleId/versions/draft", RequireAnyRole("admin", "viewer", "executor"), ruleHandler.GetDraftRule)
+			namespaces.PUT("/:id/rules/:ruleId/versions/draft", RequireRole("admin"), ruleHandler.UpdateRule)
+			namespaces.POST("/:id/rules/:ruleId/publish", RequireRole("admin"), ruleHandler.PublishRule)
+			namespaces.GET("/:id/rules/:ruleId/history", RequireAnyRole("admin", "viewer", "executor"), ruleHandler.ListRuleVersions)
+			namespaces.DELETE("/:id/rules/:ruleId/versions/:version", RequireRole("admin"), ruleHandler.DeleteRule)
+
+			// Terminal routes within namespace - nested under namespace ID
+			namespaces.GET("/:id/terminals", RequireAnyRole("admin", "viewer", "executor"), terminalHandler.ListTerminals)
+			namespaces.POST("/:id/terminals", RequireRole("admin"), terminalHandler.CreateTerminal)
+			namespaces.GET("/:id/terminals/:terminalId", RequireAnyRole("admin", "viewer", "executor"), terminalHandler.GetTerminal)
+			namespaces.DELETE("/:id/terminals/:terminalId", RequireRole("admin"), terminalHandler.DeleteTerminal)
 		}
 	}
 
