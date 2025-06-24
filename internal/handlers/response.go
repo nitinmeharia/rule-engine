@@ -233,11 +233,20 @@ func (h *ResponseHandler) ConvertRulesToResponse(rules []*domain.Rule) []domain.
 	return response
 }
 
-// ConvertRuleVersionsToResponse converts a slice of domain Rules to RuleResponse slice for version history
+// ConvertRuleVersionsToResponse converts a slice of domain Rules to RuleResponse slice
 func (h *ResponseHandler) ConvertRuleVersionsToResponse(rules []*domain.Rule) []domain.RuleResponse {
-	var response []domain.RuleResponse
-	for _, rule := range rules {
-		response = append(response, h.ConvertRuleToResponse(rule))
+	response := make([]domain.RuleResponse, len(rules))
+	for i, rule := range rules {
+		response[i] = h.ConvertRuleToResponse(rule)
 	}
 	return response
+}
+
+// ConvertTerminalToResponse converts a domain Terminal to TerminalResponse
+func (h *ResponseHandler) ConvertTerminalToResponse(terminal *domain.Terminal) domain.TerminalResponse {
+	return domain.TerminalResponse{
+		TerminalID: terminal.TerminalID,
+		CreatedAt:  terminal.CreatedAt,
+		CreatedBy:  terminal.CreatedBy,
+	}
 }

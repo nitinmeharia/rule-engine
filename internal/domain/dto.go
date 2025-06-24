@@ -41,6 +41,10 @@ type UpdateRuleRequest struct {
 	Conditions json.RawMessage `json:"conditions" binding:"required"`
 }
 
+type CreateTerminalRequest struct {
+	TerminalID string `json:"terminalId" binding:"required"`
+}
+
 // Response DTOs
 type NamespaceResponse struct {
 	ID          string    `json:"id"`
@@ -99,6 +103,12 @@ type CreateFunctionResponse struct {
 
 type UpdateFunctionResponse struct {
 	Function FunctionResponse `json:"function"`
+}
+
+type TerminalResponse struct {
+	TerminalID string    `json:"terminalId"`
+	CreatedAt  time.Time `json:"createdAt"`
+	CreatedBy  string    `json:"createdBy"`
 }
 
 // Error Response

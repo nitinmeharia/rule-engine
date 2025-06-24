@@ -514,6 +514,120 @@ test_rules_api() {
     make_request "DELETE" "/v1/namespaces/rules-test-ns" "$admin_token" "" "204" "Delete rules test namespace"
 }
 
+# Function to test terminals API
+# This suite tests the complete terminal lifecycle: create, read, list, delete
+# 
+# CRITICAL CONTRACT TESTS INCLUDED:
+# 1. Parent namespace validation - ensures terminals cannot be accessed if parent namespace doesn't exist
+# 2. RBAC validation - ensures proper access control for terminal operations
+# 3. Input validation - ensures malformed terminal requests are rejected
+# 4. Error handling - ensures proper error responses for edge cases
+#
+# This test suite validates the RESTful contract and parent-child relationship integrity
+test_terminals_api() {
+    print_status "INFO" "Testing Terminals API"
+    echo "=================================="
+    local admin_token=$(generate_jwt_token "$CLIENT_ID" "$ADMIN_ROLE")
+    local viewer_token=$(generate_jwt_token "$CLIENT_ID" "$VIEWER_ROLE")
+    local executor_token=$(generate_jwt_token "$CLIENT_ID" "$EXECUTOR_ROLE")
+
+    # Create a namespace for terminals testing
+    local ns_data='{"id": "terminals-test-ns", "description": "Namespace for comprehensive terminals testing"}'
+    make_request "POST" "/v1/namespaces" "$admin_token" "$ns_data" "201" "Create terminals test namespace"
+
+    # Test list terminals in empty namespace
+    make_request "GET" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" "" "200" "List terminals in empty namespace"
+
+    # Test create terminal with admin role
+    local create_terminal_data='{"terminalId": "approve"}'
+    make_request "POST" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" "$create_terminal_data" "201" "Create terminal (admin)"
+
+    # Test create terminal with viewer role (should fail)
+    local create_terminal_data2='{"terminalId": "reject"}'
+    make_request "POST" "/v1/namespaces/terminals-test-ns/terminals" "$viewer_token" "$create_terminal_data2" "403" "Create terminal (viewer - forbidden)"
+
+    # Test create duplicate terminal
+    make_request "POST" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" "$create_terminal_data" "409" "Create duplicate terminal"
+
+    # Test create terminal with invalid data
+    local invalid_terminal_data='{"terminalId": ""}'
+    make_request "POST" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" "$invalid_terminal_data" "400" "Create terminal with empty ID"
+
+    # Test create terminal with missing data
+    local missing_terminal_data='{}'
+    make_request "POST" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" "$missing_terminal_data" "400" "Create terminal with missing ID"
+
+    # Test create terminal in non-existent namespace (CRITICAL CONTRACT TEST)
+    make_request "POST" "/v1/namespaces/non-existent-ns/terminals" "$admin_token" "$create_terminal_data2" "404" "Create terminal in non-existent namespace (parent validation working)"
+
+    # Test list terminals after creation
+    make_request "GET" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" "" "200" "List terminals after creation"
+
+    # Test list terminals with viewer role
+    make_request "GET" "/v1/namespaces/terminals-test-ns/terminals" "$viewer_token" "" "200" "List terminals (viewer)"
+
+    # Test list terminals in non-existent namespace (CRITICAL CONTRACT TEST)
+    make_request "GET" "/v1/namespaces/non-existent-ns/terminals" "$admin_token" "" "404" "List terminals in non-existent namespace (parent validation working)"
+
+    # Create another terminal
+    make_request "POST" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" "$create_terminal_data2" "201" "Create second terminal"
+
+    # Test list terminals with multiple terminals
+    make_request "GET" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" "" "200" "List terminals with multiple terminals"
+
+    # Test get specific terminal
+    make_request "GET" "/v1/namespaces/terminals-test-ns/terminals/approve" "$admin_token" "" "200" "Get specific terminal"
+
+    # Test get terminal with viewer role
+    make_request "GET" "/v1/namespaces/terminals-test-ns/terminals/approve" "$viewer_token" "" "200" "Get terminal (viewer)"
+
+    # Test get terminal in non-existent namespace (CRITICAL CONTRACT TEST)
+    make_request "GET" "/v1/namespaces/non-existent-ns/terminals/approve" "$admin_token" "" "404" "Get terminal in non-existent namespace (parent validation working)"
+
+    # Test get non-existent terminal
+    make_request "GET" "/v1/namespaces/terminals-test-ns/terminals/non-existent" "$admin_token" "" "404" "Get non-existent terminal"
+
+    # Test delete terminal with admin role
+    make_request "DELETE" "/v1/namespaces/terminals-test-ns/terminals/approve" "$admin_token" "" "204" "Delete terminal (admin)"
+
+    # Test delete terminal with viewer role (should fail)
+    make_request "DELETE" "/v1/namespaces/terminals-test-ns/terminals/reject" "$viewer_token" "" "403" "Delete terminal (viewer - forbidden)"
+
+    # Test delete terminal in non-existent namespace (CRITICAL CONTRACT TEST)
+    make_request "DELETE" "/v1/namespaces/non-existent-ns/terminals/approve" "$admin_token" "" "404" "Delete terminal in non-existent namespace (parent validation working)"
+
+    # Test delete non-existent terminal
+    make_request "DELETE" "/v1/namespaces/terminals-test-ns/terminals/non-existent" "$admin_token" "" "404" "Delete non-existent terminal"
+
+    # Test get deleted terminal (should fail)
+    make_request "GET" "/v1/namespaces/terminals-test-ns/terminals/approve" "$admin_token" "" "404" "Get deleted terminal"
+
+    # Test list terminals after deletion
+    make_request "GET" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" "" "200" "List terminals after deletion"
+
+    # Test RBAC for terminals
+    make_request "GET" "/v1/namespaces/terminals-test-ns/terminals" "$viewer_token" "" "200" "Viewer can list terminals"
+    make_request "GET" "/v1/namespaces/terminals-test-ns/terminals/reject" "$viewer_token" "" "200" "Viewer can read terminal"
+    make_request "POST" "/v1/namespaces/terminals-test-ns/terminals" "$viewer_token" '{"terminalId":"viewer_terminal"}' "403" "Viewer cannot create terminal"
+    make_request "DELETE" "/v1/namespaces/terminals-test-ns/terminals/reject" "$viewer_token" "" "403" "Viewer cannot delete terminal"
+
+    # Test edge cases and error conditions
+    make_request "POST" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" '{"terminalId":"reject"}' "409" "Create duplicate terminal"
+    make_request "POST" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" '{"terminalId":""}' "400" "Create terminal with empty ID"
+    make_request "POST" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" '{}' "400" "Create terminal with missing ID"
+    make_request "POST" "/v1/namespaces/terminals-test-ns/terminals" "$admin_token" '{invalid json}' "400" "Create terminal with malformed JSON"
+
+    # Test non-existent terminal operations
+    make_request "GET" "/v1/namespaces/terminals-test-ns/terminals/non_existent" "$admin_token" "" "404" "Get non-existent terminal"
+    make_request "DELETE" "/v1/namespaces/terminals-test-ns/terminals/non_existent" "$admin_token" "" "404" "Delete non-existent terminal"
+
+    # Test with invalid namespace format (should return 404 for non-existent namespace)
+    make_request "GET" "/v1/namespaces/invalid-namespace/terminals" "$admin_token" "" "404" "List terminals with invalid namespace (returns 404 for non-existent parent)"
+
+    # Clean up
+    make_request "DELETE" "/v1/namespaces/terminals-test-ns" "$admin_token" "" "204" "Delete terminals test namespace"
+}
+
 # Function to test error handling
 test_error_handling() {
     print_status "INFO" "Testing Error Handling"
@@ -667,6 +781,7 @@ main() {
     test_fields_api
     test_functions_api
     test_rules_api
+    test_terminals_api
     test_error_handling
     test_rbac
     test_edge_cases
