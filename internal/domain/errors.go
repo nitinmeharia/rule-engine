@@ -38,6 +38,7 @@ const (
 	ErrCodeWorkflowAlreadyExists   = "WORKFLOW_ALREADY_EXISTS"
 	ErrCodeWorkflowNotFound        = "WORKFLOW_NOT_FOUND"
 	ErrCodeInvalidWorkflowID       = "INVALID_WORKFLOW_ID"
+	ErrCodeInvalidWorkflowStartAt  = "INVALID_WORKFLOW_START_AT"
 	ErrCodeWorkflowExecutionFailed = "WORKFLOW_EXECUTION_FAILED"
 
 	// Terminal errors
@@ -59,6 +60,13 @@ const (
 	// Internal errors
 	ErrCodeInternalError = "INTERNAL_ERROR"
 	ErrCodeListError     = "LIST_ERROR"
+
+	// Cache/Config errors
+	ErrCodeInvalidChecksum = "INVALID_CHECKSUM"
+
+	// Execution errors
+	ErrCodeInvalidExecutionRequest = "INVALID_EXECUTION_REQUEST"
+	ErrCodeInvalidExecutionData    = "INVALID_EXECUTION_DATA"
 )
 
 // APIError represents a standardized API error response
@@ -81,7 +89,9 @@ func (e *APIError) HTTPStatus() int {
 	case ErrCodeInvalidNamespaceID, ErrCodeInvalidFieldID, ErrCodeInvalidFunctionID,
 		ErrCodeInvalidRuleID, ErrCodeInvalidWorkflowID, ErrCodeInvalidTerminalID,
 		ErrCodeInvalidFieldType, ErrCodeInvalidFunctionType, ErrCodeInvalidRuleLogic,
-		ErrCodeInvalidDescription, ErrCodeInvalidFunctionArgs, ErrCodeValidationError:
+		ErrCodeInvalidDescription, ErrCodeInvalidFunctionArgs, ErrCodeValidationError,
+		ErrCodeInvalidWorkflowStartAt, ErrCodeInvalidChecksum, ErrCodeInvalidExecutionRequest,
+		ErrCodeInvalidExecutionData:
 		return http.StatusBadRequest
 	case ErrCodeMissingAuthHeader, ErrCodeInvalidJWTToken:
 		return http.StatusUnauthorized
@@ -131,7 +141,9 @@ func getErrorType(code string) string {
 	case ErrCodeInvalidNamespaceID, ErrCodeInvalidFieldID, ErrCodeInvalidFunctionID,
 		ErrCodeInvalidRuleID, ErrCodeInvalidWorkflowID, ErrCodeInvalidTerminalID,
 		ErrCodeInvalidFieldType, ErrCodeInvalidFunctionType, ErrCodeInvalidRuleLogic,
-		ErrCodeInvalidDescription, ErrCodeInvalidFunctionArgs, ErrCodeValidationError:
+		ErrCodeInvalidDescription, ErrCodeInvalidFunctionArgs, ErrCodeValidationError,
+		ErrCodeInvalidWorkflowStartAt, ErrCodeInvalidChecksum, ErrCodeInvalidExecutionRequest,
+		ErrCodeInvalidExecutionData:
 		return "BAD_REQUEST"
 	default:
 		return "INTERNAL_ERROR"
@@ -166,6 +178,7 @@ var (
 	ErrWorkflowAlreadyExists   = NewAPIError(ErrCodeWorkflowAlreadyExists, "Workflow already exists")
 	ErrWorkflowNotFound        = NewAPIError(ErrCodeWorkflowNotFound, "Workflow not found")
 	ErrInvalidWorkflowID       = NewAPIError(ErrCodeInvalidWorkflowID, "Workflow ID is required")
+	ErrInvalidWorkflowStartAt  = NewAPIError(ErrCodeInvalidWorkflowStartAt, "Invalid workflow start at")
 	ErrWorkflowExecutionFailed = NewAPIError(ErrCodeWorkflowExecutionFailed, "Workflow execution failed")
 
 	ErrTerminalAlreadyExists = NewAPIError(ErrCodeTerminalAlreadyExists, "Terminal already exists")
@@ -180,4 +193,9 @@ var (
 	ErrPreconditionFailed = NewAPIError(ErrCodePreconditionFailed, "Precondition failed")
 	ErrInternalError      = NewAPIError(ErrCodeInternalError, "Internal server error")
 	ErrListError          = NewAPIError(ErrCodeListError, "Failed to list resources")
+
+	ErrInvalidChecksum = NewAPIError(ErrCodeInvalidChecksum, "Invalid checksum")
+
+	ErrInvalidExecutionRequest = NewAPIError(ErrCodeInvalidExecutionRequest, "Invalid execution request")
+	ErrInvalidExecutionData    = NewAPIError(ErrCodeInvalidExecutionData, "Invalid execution data")
 )

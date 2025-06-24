@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"regexp"
 	"strings"
 
 	"github.com/rule-engine/internal/domain"
@@ -33,7 +32,7 @@ func NewNamespaceService(namespaceRepo domain.NamespaceRepository) *NamespaceSer
 
 // CreateNamespace creates a new namespace with validation
 func (s *NamespaceService) CreateNamespace(ctx context.Context, namespace *domain.Namespace) error {
-	if err := s.validateNamespace(namespace); err != nil {
+	if err := namespace.Validate(); err != nil {
 		return err
 	}
 
@@ -98,36 +97,6 @@ func (s *NamespaceService) DeleteNamespace(ctx context.Context, id string) error
 	}
 
 	return s.namespaceRepo.Delete(ctx, id)
-}
-
-// validateNamespace validates namespace input
-func (s *NamespaceService) validateNamespace(namespace *domain.Namespace) error {
-	if namespace == nil {
-		return domain.ErrValidationError
-	}
-
-	if strings.TrimSpace(namespace.ID) == "" {
-		return domain.ErrInvalidNamespaceID
-	}
-
-	if len(namespace.ID) > 50 {
-		return domain.ErrInvalidNamespaceID
-	}
-
-	// Check if ID contains only alphanumeric characters, hyphens, and underscores
-	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(namespace.ID) {
-		return domain.ErrInvalidNamespaceID
-	}
-
-	if strings.TrimSpace(namespace.CreatedBy) == "" {
-		return domain.ErrValidationError
-	}
-
-	if len(namespace.Description) > 500 {
-		return domain.ErrInvalidDescription
-	}
-
-	return nil
 }
 
 // isValidNamespaceID checks if namespace ID follows naming conventions

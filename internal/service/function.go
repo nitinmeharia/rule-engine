@@ -20,7 +20,7 @@ func NewFunctionService(repo domain.FunctionRepository) *FunctionService {
 
 // CreateFunction creates a new function
 func (s *FunctionService) CreateFunction(ctx context.Context, namespace string, function *domain.Function) error {
-	if err := s.validateFunction(function); err != nil {
+	if err := function.Validate(); err != nil {
 		return err
 	}
 
@@ -49,7 +49,7 @@ func (s *FunctionService) CreateFunction(ctx context.Context, namespace string, 
 	function.Version = maxVersion + 1
 	function.Status = domain.StatusDraft
 	function.CreatedAt = time.Now()
-	function.ReturnType = s.computeReturnType(function.Type)
+	function.ReturnType = function.ComputeReturnType()
 
 	// Create the function
 	return s.repo.Create(ctx, function)
@@ -113,7 +113,7 @@ func (s *FunctionService) UpdateFunction(ctx context.Context, namespace, functio
 	// Set the FunctionID from the URL parameter since the handler doesn't set it
 	function.FunctionID = functionID
 
-	if err := s.validateFunction(function); err != nil {
+	if err := function.Validate(); err != nil {
 		return err
 	}
 
@@ -137,7 +137,6 @@ func (s *FunctionService) UpdateFunction(ctx context.Context, namespace, functio
 			function.FunctionID = functionID
 			function.Version = active.Version + 1
 			function.Status = "draft"
-			function.CreatedBy = function.CreatedBy
 			return s.repo.Create(ctx, function)
 		}
 		return err
@@ -148,7 +147,6 @@ func (s *FunctionService) UpdateFunction(ctx context.Context, namespace, functio
 	function.FunctionID = functionID
 	function.Version = draft.Version
 	function.Status = "draft"
-	function.CreatedBy = function.CreatedBy
 	return s.repo.Update(ctx, function)
 }
 
@@ -160,8 +158,8 @@ func (s *FunctionService) PublishFunction(ctx context.Context, namespace, functi
 		return domain.ErrFunctionNotFound
 	}
 
-	// Validate dependencies (in a real implementation, you'd check if referenced fields exist)
-	if err := s.validateFunctionDependencies(ctx, namespace, draft); err != nil {
+	// Validate the function using domain model validation
+	if err := draft.Validate(); err != nil {
 		return err
 	}
 
@@ -182,74 +180,4 @@ func (s *FunctionService) DeleteFunction(ctx context.Context, namespace, functio
 
 	// Delete the function
 	return s.repo.Delete(ctx, namespace, functionID, version)
-}
-
-// validateFunction validates function data
-func (s *FunctionService) validateFunction(function *domain.Function) error {
-	if function.FunctionID == "" {
-		return domain.ErrInvalidFunctionID
-	}
-
-	if function.Type == "" {
-		return domain.ErrInvalidFunctionType
-	}
-
-	// Validate function type
-	validTypes := []string{domain.FunctionTypeMax, domain.FunctionTypeSum, domain.FunctionTypeAvg, domain.FunctionTypeIn}
-	isValidType := false
-	for _, t := range validTypes {
-		if function.Type == t {
-			isValidType = true
-			break
-		}
-	}
-	if !isValidType {
-		return domain.ErrInvalidFunctionType
-	}
-
-	// Validate based on function type
-	switch function.Type {
-	case domain.FunctionTypeMax, domain.FunctionTypeSum, domain.FunctionTypeAvg:
-		if len(function.Args) == 0 {
-			return domain.ErrInvalidFunctionArgs
-		}
-		if len(function.Values) > 0 {
-			return domain.ErrInvalidFunctionArgs
-		}
-	case domain.FunctionTypeIn:
-		if len(function.Values) == 0 {
-			return domain.ErrInvalidFunctionArgs
-		}
-		if len(function.Args) > 0 {
-			return domain.ErrInvalidFunctionArgs
-		}
-	}
-
-	return nil
-}
-
-// validateFunctionDependencies validates that function dependencies exist
-func (s *FunctionService) validateFunctionDependencies(ctx context.Context, namespace string, function *domain.Function) error {
-	// For numeric functions, check if referenced fields exist
-	if function.Type == domain.FunctionTypeMax || function.Type == domain.FunctionTypeSum || function.Type == domain.FunctionTypeAvg {
-		// In a real implementation, you'd check if the fields in function.Args exist
-		// For now, we'll just validate that args are not empty
-		if len(function.Args) == 0 {
-			return domain.ErrInvalidFunctionArgs
-		}
-	}
-
-	return nil
-}
-
-// computeReturnType determines the return type based on function type
-func (s *FunctionService) computeReturnType(functionType string) string {
-	switch functionType {
-	case domain.FunctionTypeMax, domain.FunctionTypeSum, domain.FunctionTypeAvg:
-		return domain.FunctionReturnTypeNumber
-	case domain.FunctionTypeIn:
-		return domain.FunctionReturnTypeBool
-	default:
-		return ""
-	}
 }

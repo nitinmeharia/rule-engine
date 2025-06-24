@@ -86,7 +86,7 @@ func TestNamespaceHandler_CreateNamespace(t *testing.T) {
 	}{
 		{
 			name: "successful creation",
-			requestBody: CreateNamespaceRequest{
+			requestBody: domain.CreateNamespaceRequest{
 				ID:          "test-ns",
 				Description: "Test namespace",
 			},
@@ -130,7 +130,7 @@ func TestNamespaceHandler_CreateNamespace(t *testing.T) {
 		},
 		{
 			name: "missing client ID",
-			requestBody: CreateNamespaceRequest{
+			requestBody: domain.CreateNamespaceRequest{
 				ID:          "test-ns",
 				Description: "Test namespace",
 			},
@@ -144,7 +144,7 @@ func TestNamespaceHandler_CreateNamespace(t *testing.T) {
 		},
 		{
 			name: "namespace already exists",
-			requestBody: CreateNamespaceRequest{
+			requestBody: domain.CreateNamespaceRequest{
 				ID:          "test-ns",
 				Description: "Test namespace",
 			},
@@ -164,7 +164,7 @@ func TestNamespaceHandler_CreateNamespace(t *testing.T) {
 		},
 		{
 			name: "service error during creation",
-			requestBody: CreateNamespaceRequest{
+			requestBody: domain.CreateNamespaceRequest{
 				ID:          "test-ns",
 				Description: "Test namespace",
 			},
@@ -184,7 +184,7 @@ func TestNamespaceHandler_CreateNamespace(t *testing.T) {
 		},
 		{
 			name: "service error during fetch",
-			requestBody: CreateNamespaceRequest{
+			requestBody: domain.CreateNamespaceRequest{
 				ID:          "test-ns",
 				Description: "Test namespace",
 			},
@@ -526,7 +526,7 @@ func TestNamespaceHandler_ToNamespaceResponse(t *testing.T) {
 		CreatedAt:   time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 
-	response := handler.toNamespaceResponse(namespace)
+	response := handler.responseHandler.ConvertNamespaceToResponse(namespace)
 
 	assert.Equal(t, "test-ns", response.ID)
 	assert.Equal(t, "Test namespace", response.Description)

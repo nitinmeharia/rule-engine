@@ -3,64 +3,38 @@ package handlers
 import (
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rule-engine/internal/domain"
 	"github.com/rule-engine/internal/service"
 )
 
-// NamespaceHandler handles namespace HTTP requests
+// NamespaceHandler handles HTTP requests for namespaces
 type NamespaceHandler struct {
 	namespaceService service.NamespaceServiceInterface
+	responseHandler  *ResponseHandler
 }
 
 // NewNamespaceHandler creates a new namespace handler
 func NewNamespaceHandler(namespaceService service.NamespaceServiceInterface) *NamespaceHandler {
 	return &NamespaceHandler{
 		namespaceService: namespaceService,
+		responseHandler:  NewResponseHandler(),
 	}
 }
 
-// CreateNamespaceRequest represents the request body for creating a namespace
-type CreateNamespaceRequest struct {
-	ID          string `json:"id" binding:"required"`
-	Description string `json:"description" binding:"required"`
-}
-
-// CreateNamespaceResponse represents the response for creating a namespace
-type CreateNamespaceResponse struct {
-	Success   bool              `json:"success"`
-	Namespace NamespaceResponse `json:"namespace"`
-}
-
-// NamespaceResponse represents a namespace in API responses
-type NamespaceResponse struct {
-	ID          string    `json:"id"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"createdAt"`
-	CreatedBy   string    `json:"createdBy"`
-}
-
-// ErrorResponse represents an error response
-type ErrorResponse struct {
-	Error   string                 `json:"error"`
-	Code    string                 `json:"code"`
-	Details map[string]interface{} `json:"details,omitempty"`
-}
-
-// CreateNamespace creates a new namespace
+// CreateNamespace handles POST /v1/namespaces
 func (h *NamespaceHandler) CreateNamespace(c *gin.Context) {
-	var req CreateNamespaceRequest
+	var req domain.CreateNamespaceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, domain.ErrValidationError)
+		h.responseHandler.BadRequest(c, "Invalid request body")
 		return
 	}
 
-	// Get createdBy from JWT context
+	// Get client ID from context
 	createdBy, exists := c.Get("client_id")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, domain.ErrInternalError)
+		h.responseHandler.Unauthorized(c, "Client ID not found")
 		return
 	}
 
@@ -72,84 +46,79 @@ func (h *NamespaceHandler) CreateNamespace(c *gin.Context) {
 
 	err := h.namespaceService.CreateNamespace(c.Request.Context(), namespace)
 	if err != nil {
-		statusCode, errorResp := h.mapError(err)
-		c.JSON(statusCode, errorResp)
+		switch err {
+		case domain.ErrNamespaceAlreadyExists:
+			h.responseHandler.Conflict(c, "Namespace already exists")
+		case domain.ErrInvalidNamespaceID:
+			h.responseHandler.BadRequest(c, "Invalid namespace ID")
+		case domain.ErrInvalidDescription:
+			h.responseHandler.BadRequest(c, "Invalid description")
+		default:
+			h.responseHandler.InternalServerError(c, "Internal server error")
+		}
 		return
 	}
 
-	// Get the created namespace to return in response
-	createdNamespace, err := h.namespaceService.GetNamespace(c.Request.Context(), req.ID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, domain.ErrInternalError)
-		return
-	}
-
-	response := CreateNamespaceResponse{
-		Success: true,
-		Namespace: NamespaceResponse{
-			ID:          createdNamespace.ID,
-			Description: createdNamespace.Description,
-			CreatedAt:   createdNamespace.CreatedAt,
-			CreatedBy:   createdNamespace.CreatedBy,
-		},
-	}
-
-	c.JSON(http.StatusCreated, response)
+	response := h.responseHandler.ConvertNamespaceToResponse(namespace)
+	h.responseHandler.Created(c, response)
 }
 
-// GetNamespace retrieves a namespace by ID
+// GetNamespace handles GET /v1/namespaces/{id}
 func (h *NamespaceHandler) GetNamespace(c *gin.Context) {
 	id := c.Param("id")
+	if id == "" {
+		h.responseHandler.BadRequest(c, "Namespace ID is required")
+		return
+	}
 
 	namespace, err := h.namespaceService.GetNamespace(c.Request.Context(), id)
 	if err != nil {
-		statusCode, errorResp := h.mapError(err)
-		c.JSON(statusCode, errorResp)
+		if err == domain.ErrNamespaceNotFound {
+			h.responseHandler.NotFound(c, "Namespace not found")
+		} else {
+			h.responseHandler.InternalServerError(c, "Internal server error")
+		}
 		return
 	}
 
-	c.JSON(http.StatusOK, namespace)
+	response := h.responseHandler.ConvertNamespaceToResponse(namespace)
+	h.responseHandler.OK(c, response)
 }
 
-// ListNamespaces retrieves all namespaces
+// ListNamespaces handles GET /v1/namespaces
 func (h *NamespaceHandler) ListNamespaces(c *gin.Context) {
 	namespaces, err := h.namespaceService.ListNamespaces(c.Request.Context())
 	if err != nil {
-		statusCode, errorResp := h.mapError(err)
-		c.JSON(statusCode, errorResp)
+		h.responseHandler.InternalServerError(c, "Internal server error")
 		return
 	}
 
-	response := make([]NamespaceResponse, len(namespaces))
-	for i, ns := range namespaces {
-		response[i] = h.toNamespaceResponse(ns)
+	var response []domain.NamespaceResponse
+	for _, namespace := range namespaces {
+		response = append(response, h.responseHandler.ConvertNamespaceToResponse(namespace))
 	}
-
-	c.JSON(http.StatusOK, response)
+	h.responseHandler.OK(c, response)
 }
 
-// DeleteNamespace deletes a namespace
+// DeleteNamespace handles DELETE /v1/namespaces/{id}
 func (h *NamespaceHandler) DeleteNamespace(c *gin.Context) {
 	id := c.Param("id")
+	if id == "" {
+		h.responseHandler.BadRequest(c, "Namespace ID is required")
+		return
+	}
 
 	err := h.namespaceService.DeleteNamespace(c.Request.Context(), id)
 	if err != nil {
-		statusCode, errorResp := h.mapError(err)
-		c.JSON(statusCode, errorResp)
+		if err == domain.ErrNamespaceNotFound {
+			h.responseHandler.NotFound(c, "Namespace not found")
+		} else {
+			h.responseHandler.InternalServerError(c, "Internal server error")
+		}
 		return
 	}
 
-	c.AbortWithStatus(http.StatusNoContent)
-}
-
-// toNamespaceResponse converts domain namespace to response
-func (h *NamespaceHandler) toNamespaceResponse(namespace *domain.Namespace) NamespaceResponse {
-	return NamespaceResponse{
-		ID:          namespace.ID,
-		Description: namespace.Description,
-		CreatedAt:   namespace.CreatedAt,
-		CreatedBy:   namespace.CreatedBy,
-	}
+	h.responseHandler.NoContent(c)
 }
 
 // mapError maps domain errors to appropriate HTTP responses
