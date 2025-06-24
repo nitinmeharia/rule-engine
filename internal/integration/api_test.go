@@ -108,7 +108,7 @@ func (suite *IntegrationTestSuite) SetupSuite() {
 	suite.cleanupTestData(pool)
 
 	// Create test server
-	srv, err := server.New(cfg, pool, log, engine)
+	srv, err := server.New(cfg, pool, log, engine, "test-version")
 	suite.Require().NoError(err)
 
 	suite.pool = pool

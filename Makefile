@@ -13,7 +13,7 @@ help: ## Show this help message
 # Variables
 BINARY_NAME=rule-engine
 DOCKER_IMAGE=rule-engine
-GO_VERSION=1.22
+GO_VERSION=1.24
 DB_URL?=postgresql://localhost:5432/rule_engine?sslmode=disable
 DB_TEST_URL?=postgresql://localhost:5432/rule_engine_test?sslmode=disable
 
@@ -52,6 +52,17 @@ run-background: ## Run the application in background
 	@go run cmd/api/main.go > /dev/null 2>&1 &
 	@echo "Server started in background. PID: $$!"
 	@echo "Use 'make stop' to stop the server"
+
+run-dev: ## Run the application in development mode
+	@echo "Running $(BINARY_NAME) in development mode..."
+	@make stop
+	@sleep 2
+	@echo "Starting development server..."
+	@echo "Server will be available at: http://localhost:8080"
+	@echo "Health check: http://localhost:8080/health"
+	@echo "Metrics: http://localhost:8080/metrics"
+	@echo "Press Ctrl+C to stop"
+	@go run cmd/api/main.go
 
 dev-setup: ## Set up development environment
 	@echo "Setting up development environment..."

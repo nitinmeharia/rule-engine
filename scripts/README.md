@@ -15,7 +15,7 @@ Comprehensive testing suite for the Rule Engine API with end-to-end validation, 
 - [Testing Workflows](#testing-workflows)
 - [Cache Refresh Testing](#cache-refresh-testing)
 - [Troubleshooting](#troubleshooting)
-- [CI/CD Integration](#cicd-integration)
+- [Local Development Workflow](#local-development-workflow)
 
 ## 🎯 Overview
 
@@ -25,7 +25,7 @@ This directory contains a comprehensive testing framework for the Rule Engine AP
 - **Workflow Validation**: Terminal step validation and path verification
 - **Cache Refresh**: Real-time cache synchronization and consistency
 - **Error Handling**: Comprehensive error scenarios and edge cases
-- **Performance**: Load testing and response time validation
+- **Integration Testing**: End-to-end workflow validation
 
 ## 🔧 Prerequisites
 
@@ -93,19 +93,19 @@ go run ./cmd/api
 ### 🔄 Cache Refresh Testing
 | Script | Purpose | Duration | Coverage |
 |--------|---------|----------|----------|
-| `test-cache-refresh-e2e.sh` | Complete cache refresh E2E testing | ~2-3 min | Full cache lifecycle |
-| `test-cache-refresh-integration.sh` | Integration cache refresh tests | ~1 min | Cache consistency |
-| `test-cache-refresh.sh` | Basic cache refresh validation | ~30 sec | Core functionality |
+| `test-cache-refresh-e2e.sh` | Complete cache refresh E2E testing | ~1-2 min | Full cache lifecycle |
+| `test-cache-refresh-integration.sh` | Integration cache refresh tests | ~30 sec | Cache consistency |
+| `test-cache-refresh.sh` | Basic cache refresh validation | ~15 sec | Core functionality |
 
 ### 🧪 API Testing
 | Script | Purpose | Duration | Coverage |
 |--------|---------|----------|----------|
-| `test-api-e2e.sh` | Complete API E2E testing | ~5-7 min | All endpoints + cache |
-| `test-api-quick.sh` | Fast API validation | ~2-3 min | Core endpoints |
-| `test-workflows-api.sh` | Workflow-specific testing | ~2 min | Workflow lifecycle |
-| `test-rules-api.sh` | Rules API testing | ~1 min | Rule CRUD operations |
-| `test-functions-api.sh` | Functions API testing | ~1 min | Function operations |
-| `test-terminals-api.sh` | Terminals API testing | ~1 min | Terminal management |
+| `test-api-e2e.sh` | Complete API E2E testing | ~1 min | All endpoints + cache |
+| `test-api-quick.sh` | Fast API validation | ~30 sec | Core endpoints |
+| `test-workflows-api.sh` | Workflow-specific testing | ~30 sec | Workflow lifecycle |
+| `test-rules-api.sh` | Rules API testing | ~15 sec | Rule CRUD operations |
+| `test-functions-api.sh` | Functions API testing | ~15 sec | Function operations |
+| `test-terminals-api.sh` | Terminals API testing | ~15 sec | Terminal management |
 
 ### 🛠️ Utility Scripts
 | Script | Purpose | Usage |
@@ -266,87 +266,106 @@ Clean up test data after debugging:
 # Or manually clean specific namespaces
 curl -X DELETE \
      -H "Authorization: Bearer $ADMIN_TOKEN" \
-     http://localhost:8080/api/v1/namespaces/test-namespace
+     http://localhost:8080/v1/namespaces/test-namespace
 ```
 
-## 🔄 CI/CD Integration
+## 🔄 Local Development Workflow
 
-### GitHub Actions Workflow
+### Available Make Targets
 
-```yaml
-name: Rule Engine API Tests
-on: [push, pull_request]
+#### Development Commands
+```bash
+# Start development server
+make run-dev
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: rule_engine_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
+# Run all tests
+make test
 
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.24'
-          
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-          
-      - name: Install dependencies
-        run: |
-          pip install PyJWT
-          go mod download
-          
-      - name: Setup test database
-        run: ./scripts/setup-test-db.sh
-        env:
-          DATABASE_URL: postgres://postgres:test@localhost:5432/rule_engine_test?sslmode=disable
-          
-      - name: Start API server
-        run: |
-          go run ./cmd/api &
-          sleep 10
-        env:
-          DATABASE_URL: postgres://postgres:test@localhost:5432/rule_engine_test?sslmode=disable
-          
-      - name: Run E2E tests
-        run: ./scripts/test-api-e2e.sh
-        
-      - name: Run cache refresh tests
-        run: ./scripts/test-cache-refresh-e2e.sh
-        
-      - name: Cleanup
-        if: always()
-        run: ./scripts/cleanup-test-data.sh
+# Run tests with coverage
+make test-coverage
+
+# Run API tests (requires server running)
+make test-api
+
+# Run quick API tests
+make test-api-quick
+
+# Generate JWT token
+make generate-jwt
 ```
 
-### Local Development Workflow
+#### Code Quality
+```bash
+# Format code
+make fmt
+
+# Run linter
+make lint
+
+# Run go vet
+make vet
+
+# Pre-commit checks
+make pre-commit
+```
+
+#### Database Management
+```bash
+# Run migrations
+make migrate
+
+# Check migration status
+make migrate-status
+
+# Reset database
+make db-reset
+
+# Setup local database
+make setup-local-db
+```
+
+#### Docker Commands
+```bash
+# Build Docker image
+make docker-build
+
+# Run in Docker
+make docker-run
+
+# Start with docker-compose
+make docker-compose-up
+
+# Stop docker-compose
+make docker-compose-down
+```
+
+#### Dependencies
+```bash
+# Download dependencies
+make deps-download
+
+# Tidy dependencies
+make deps-tidy
+
+# Verify dependencies
+make deps-verify
+
+# Upgrade dependencies
+make deps-upgrade
+```
+
+### Development Workflow Example
 
 ```bash
 # 1. Start development environment
 make run-dev
 
 # 2. Run tests in parallel
-make test-e2e & make test-cache & wait
+make test-api & make test-coverage & wait
 
 # 3. Check test results
-echo "E2E Tests: $?"
-echo "Cache Tests: $?"
+echo "API Tests: $?"
+echo "Coverage Tests: $?"
 ```
 
 ## 📊 Test Results Interpretation
@@ -356,7 +375,7 @@ echo "Cache Tests: $?"
 - ✅ Error messages contain actionable information
 - ✅ Cache refresh completes successfully
 - ✅ Workflow validation correctly identifies issues
-- ✅ Performance metrics within acceptable ranges
+- ✅ All API endpoints respond correctly
 
 ### Failure Indicators
 - ❌ Unexpected HTTP status codes (500, 404, 403)
@@ -365,18 +384,16 @@ echo "Cache Tests: $?"
 - ❌ Valid workflows rejected
 - ❌ Invalid workflows accepted
 
-### Performance Benchmarks
-- **API Response Time**: < 200ms for most operations
-- **Cache Refresh Time**: < 5 seconds for typical workloads
-- **Database Operations**: < 100ms for CRUD operations
-- **Memory Usage**: < 100MB for typical test scenarios
+### Test Coverage
+- **Unit Tests**: Comprehensive coverage of domain logic, services, and repositories
+- **Integration Tests**: End-to-end API validation with real database interactions
+- **Cache Tests**: Validation of cache refresh and consistency mechanisms
+- **Error Handling**: Verification of proper error responses and validation
 
 ## 📚 Additional Resources
 
 - [API Documentation](../docs/API_DOCUMENTATION.md) - Complete API reference
-- [Implementation Report](IMPLEMENTATION_REPORT.md) - Technical implementation details
 - [Main README](../README.md) - Project overview and architecture
-- [Code Structure](../docs/CODE_STRUCTURE.md) - Codebase organization
 
 ---
 

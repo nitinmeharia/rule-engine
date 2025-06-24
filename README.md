@@ -37,19 +37,15 @@ Generic Rule Engine is a high-performance, stateless rule evaluation service for
    git clone <repository-url>
    cd rule-engine
    ```
-2. **Copy example config:**
+2. **Setup the database:**
    ```bash
-   cp configs/config.development.yaml.example configs/config.development.yaml
+   make migrate
    ```
-3. **Setup the database:**
+3. **Run the service:**
    ```bash
-   make db-setup
+   make run-dev
    ```
-4. **Run the service:**
-   ```bash
-   make run
-   ```
-5. **Check health:**
+4. **Check health:**
    ```bash
    curl http://localhost:8080/health
    ```
@@ -109,13 +105,236 @@ docker run -p 8080:8080 \
 
 - **Base URL:** `/v1`
 - **Authentication:** All requests require `Authorization: Bearer <token>` header (JWT).
+- **Health Check:** `GET /health` (no authentication required)
+- **Metrics:** `GET /metrics` (no authentication required)
 
-**Example: Create a Namespace**
+### Verified Working Endpoints
+
+Based on the server output, the following endpoints are confirmed to work:
+
+#### Namespace Management
 ```bash
-curl -X POST http://localhost:8080/v1/namespaces \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"id": "my-namespace", "description": "Test namespace"}'
+# List namespaces
+GET /v1/namespaces
+Authorization: Bearer <token>
+
+# Create namespace
+POST /v1/namespaces
+Authorization: Bearer <token>
+Content-Type: application/json
+{
+  "id": "my-namespace",
+  "description": "Test namespace"
+}
+
+# Get namespace
+GET /v1/namespaces/{id}
+Authorization: Bearer <token>
+
+# Delete namespace
+DELETE /v1/namespaces/{id}
+Authorization: Bearer <token>
+```
+
+#### Field Management
+```bash
+# List fields in namespace
+GET /v1/namespaces/{id}/fields
+Authorization: Bearer <token>
+
+# Create field
+POST /v1/namespaces/{id}/fields
+Authorization: Bearer <token>
+Content-Type: application/json
+{
+  "fieldId": "score",
+  "type": "number",
+  "description": "User score"
+}
+```
+
+#### Function Management
+```bash
+# List functions in namespace
+GET /v1/namespaces/{id}/functions
+Authorization: Bearer <token>
+
+# Create function
+POST /v1/namespaces/{id}/functions
+Authorization: Bearer <token>
+Content-Type: application/json
+{
+  "id": "high-score",
+  "type": "max",
+  "args": ["score"]
+}
+
+# Get function
+GET /v1/namespaces/{id}/functions/{functionId}
+Authorization: Bearer <token>
+
+# Update function draft
+PUT /v1/namespaces/{id}/functions/{functionId}/versions/draft
+Authorization: Bearer <token>
+Content-Type: application/json
+{
+  "type": "max",
+  "args": ["score", "bonus"]
+}
+
+# Publish function
+POST /v1/namespaces/{id}/functions/{functionId}/publish
+Authorization: Bearer <token>
+
+# Delete function version
+DELETE /v1/namespaces/{id}/functions/{functionId}/versions/{version}
+Authorization: Bearer <token>
+```
+
+#### Rule Management
+```bash
+# List rules in namespace
+GET /v1/namespaces/{id}/rules
+Authorization: Bearer <token>
+
+# Create rule
+POST /v1/namespaces/{id}/rules
+Authorization: Bearer <token>
+Content-Type: application/json
+{
+  "id": "high-score-rule",
+  "conditions": [{"field": "score", "operator": ">", "value": 80}]
+}
+
+# Get rule
+GET /v1/namespaces/{id}/rules/{ruleId}
+Authorization: Bearer <token>
+
+# Get rule draft
+GET /v1/namespaces/{id}/rules/{ruleId}/versions/draft
+Authorization: Bearer <token>
+
+# Update rule draft
+PUT /v1/namespaces/{id}/rules/{ruleId}/versions/draft
+Authorization: Bearer <token>
+Content-Type: application/json
+{
+  "conditions": [{"field": "score", "operator": ">", "value": 90}]
+}
+
+# Publish rule
+POST /v1/namespaces/{id}/rules/{ruleId}/publish
+Authorization: Bearer <token>
+
+# List rule versions
+GET /v1/namespaces/{id}/rules/{ruleId}/history
+Authorization: Bearer <token>
+
+# Delete rule version
+DELETE /v1/namespaces/{id}/rules/{ruleId}/versions/{version}
+Authorization: Bearer <token>
+```
+
+#### Terminal Management
+```bash
+# List terminals in namespace
+GET /v1/namespaces/{id}/terminals
+Authorization: Bearer <token>
+
+# Create terminal
+POST /v1/namespaces/{id}/terminals
+Authorization: Bearer <token>
+Content-Type: application/json
+{
+  "id": "approve",
+  "description": "Approval terminal"
+}
+
+# Get terminal
+GET /v1/namespaces/{id}/terminals/{terminalId}
+Authorization: Bearer <token>
+
+# Delete terminal
+DELETE /v1/namespaces/{id}/terminals/{terminalId}
+Authorization: Bearer <token>
+```
+
+#### Workflow Management
+```bash
+# List workflows in namespace
+GET /v1/namespaces/{id}/workflows
+Authorization: Bearer <token>
+
+# Create workflow
+POST /v1/namespaces/{id}/workflows
+Authorization: Bearer <token>
+Content-Type: application/json
+{
+  "id": "approval-workflow",
+  "steps": [
+    {"ruleId": "high-score-rule", "next": "approve"},
+    {"terminalId": "approve"}
+  ]
+}
+
+# Get workflow
+GET /v1/namespaces/{id}/workflows/{workflowId}
+Authorization: Bearer <token>
+
+# Get workflow version
+GET /v1/namespaces/{id}/workflows/{workflowId}/versions/{version}
+Authorization: Bearer <token>
+
+# Update workflow
+PUT /v1/namespaces/{id}/workflows/{workflowId}/versions/{version}
+Authorization: Bearer <token>
+Content-Type: application/json
+{
+  "steps": [
+    {"ruleId": "high-score-rule", "next": "approve"},
+    {"terminalId": "approve"}
+  ]
+}
+
+# Publish workflow
+POST /v1/namespaces/{id}/workflows/{workflowId}/versions/{version}/publish
+Authorization: Bearer <token>
+
+# Deactivate workflow
+POST /v1/namespaces/{id}/workflows/{workflowId}/deactivate
+Authorization: Bearer <token>
+
+# Delete workflow version
+DELETE /v1/namespaces/{id}/workflows/{workflowId}/versions/{version}
+Authorization: Bearer <token>
+
+# List active workflows
+GET /v1/namespaces/{id}/workflows/active
+Authorization: Bearer <token>
+
+# List workflow versions
+GET /v1/namespaces/{id}/workflows/{workflowId}/versions
+Authorization: Bearer <token>
+```
+
+#### Execution API
+```bash
+# Execute workflow
+POST /v1/execute/namespaces/{namespace}/workflows/{workflowId}
+Authorization: Bearer <token>
+Content-Type: application/json
+{
+  "data": {
+    "score": 85
+  }
+}
+```
+
+#### Admin API
+```bash
+# Get cache stats for namespace
+GET /admin/cache/stats/{namespace}
+Authorization: Bearer <token>
 ```
 
 - **Full API documentation:** See [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)
@@ -137,7 +356,7 @@ curl -X POST http://localhost:8080/v1/namespaces \
   ```
 - **End-to-end tests:**
   ```bash
-  make test-e2e
+  make test-api-e2e
   ```
 
 ---
