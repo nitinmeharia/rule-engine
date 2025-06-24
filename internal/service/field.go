@@ -6,14 +6,13 @@ import (
 	"time"
 
 	"github.com/rule-engine/internal/domain"
-	"github.com/rule-engine/internal/repository"
 )
 
 type FieldService struct {
-	repo *repository.FieldRepository
+	repo domain.FieldRepository
 }
 
-func NewFieldService(repo *repository.FieldRepository) *FieldService {
+func NewFieldService(repo domain.FieldRepository) *FieldService {
 	return &FieldService{repo: repo}
 }
 
@@ -23,7 +22,7 @@ func (s *FieldService) CreateField(ctx context.Context, namespace string, field 
 	}
 
 	// Check if namespace exists
-	nsRepo, ok := any(s.repo).(interface {
+	nsRepo, ok := s.repo.(interface {
 		NamespaceExists(ctx context.Context, namespace string) (bool, error)
 	})
 	if ok {
@@ -58,7 +57,7 @@ func (s *FieldService) CreateField(ctx context.Context, namespace string, field 
 }
 
 func (s *FieldService) GetField(ctx context.Context, namespace, fieldID string) (*domain.Field, error) {
-	field, err := s.repo.Get(ctx, namespace, fieldID)
+	field, err := s.repo.GetByID(ctx, namespace, fieldID)
 	if err != nil {
 		if strings.Contains(err.Error(), "no rows in result set") {
 			return nil, domain.ErrFieldNotFound

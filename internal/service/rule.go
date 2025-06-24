@@ -401,15 +401,12 @@ func (s *RuleService) validateFieldDependency(ctx context.Context, namespace str
 	}
 
 	// Check if field exists
-	field, err := s.fieldRepo.GetByID(ctx, namespace, fieldID)
+	exists, err := s.fieldRepo.Exists(ctx, namespace, fieldID)
 	if err != nil {
-		if strings.Contains(err.Error(), "no rows in result set") {
-			return domain.ErrFieldNotFound
-		}
 		return domain.ErrInternalError
 	}
 
-	if field == nil {
+	if !exists {
 		return domain.ErrFieldNotFound
 	}
 

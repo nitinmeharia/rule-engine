@@ -96,7 +96,12 @@ func (s *NamespaceService) DeleteNamespace(ctx context.Context, id string) error
 		return domain.ErrNamespaceNotFound
 	}
 
-	return s.namespaceRepo.Delete(ctx, id)
+	// Delete the namespace and wrap any error
+	if err := s.namespaceRepo.Delete(ctx, id); err != nil {
+		return domain.ErrInternalError
+	}
+
+	return nil
 }
 
 // isValidNamespaceID checks if namespace ID follows naming conventions

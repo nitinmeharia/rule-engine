@@ -946,7 +946,6 @@ POST /v1/execute/namespaces/{namespace}/workflows/{workflowId}?trace=full
 ```json
 {
   "terminal": "accept",
-  "correlationId": "exec_12345",
   "executionTime": "2025-06-24T10:15:30Z",
   "trace": {
     "workflowId": "loan_eligibility",
@@ -1011,7 +1010,6 @@ POST /v1/execute/namespaces/{namespace}/workflows/{workflowId}?trace=full
 ```json
 {
   "terminal": "accept",
-  "correlationId": "exec_12345", 
   "executionTime": "2025-06-24T10:15:30Z",
   "trace": {
     "workflowId": "loan_eligibility",
@@ -1048,7 +1046,6 @@ POST /v1/execute/namespaces/{namespace}/workflows/{workflowId}?trace=full
   "error": "WORKFLOW_EXECUTION_FAILED",
   "message": "Rule 'income_check' not found in active configuration",
   "requestId": "req_12345",
-  "correlationId": "exec_12345",
   "trace": {
     "workflowId": "loan_eligibility",
     "failedAt": "check_income",
