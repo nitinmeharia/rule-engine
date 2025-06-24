@@ -27,12 +27,10 @@ func (h *ExecutionHandler) ExecuteRule(c *gin.Context) {
 
 	var req domain.ExecutionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid request body",
-			Code:  "INVALID_REQUEST",
-			Details: map[string]interface{}{
-				"validation": err.Error(),
-			},
+		c.JSON(http.StatusBadRequest, domain.ErrorResponse{
+			Code:    "INVALID_REQUEST",
+			Error:   "Bad Request",
+			Message: "Invalid request body: " + err.Error(),
 		})
 		return
 	}
@@ -64,12 +62,10 @@ func (h *ExecutionHandler) ExecuteWorkflow(c *gin.Context) {
 
 	var req domain.ExecutionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid request body",
-			Code:  "INVALID_REQUEST",
-			Details: map[string]interface{}{
-				"validation": err.Error(),
-			},
+		c.JSON(http.StatusBadRequest, domain.ErrorResponse{
+			Code:    "INVALID_REQUEST",
+			Error:   "Bad Request",
+			Message: "Invalid request body: " + err.Error(),
 		})
 		return
 	}

@@ -9,11 +9,6 @@ import (
 	"github.com/rule-engine/internal/repository"
 )
 
-var allowedFieldTypes = map[string]struct{}{
-	"number": {},
-	"string": {},
-}
-
 type FieldService struct {
 	repo *repository.FieldRepository
 }
@@ -23,7 +18,7 @@ func NewFieldService(repo *repository.FieldRepository) *FieldService {
 }
 
 func (s *FieldService) CreateField(ctx context.Context, namespace string, field *domain.Field) error {
-	if err := s.validateField(field); err != nil {
+	if err := field.Validate(); err != nil {
 		return err
 	}
 
@@ -83,7 +78,7 @@ func (s *FieldService) ListFields(ctx context.Context, namespace string) ([]*dom
 }
 
 func (s *FieldService) UpdateField(ctx context.Context, field *domain.Field) error {
-	if err := s.validateField(field); err != nil {
+	if err := field.Validate(); err != nil {
 		return err
 	}
 	exists, err := s.repo.Exists(ctx, field.Namespace, field.FieldID)
@@ -105,21 +100,4 @@ func (s *FieldService) DeleteField(ctx context.Context, namespace, fieldID strin
 		return domain.ErrFieldNotFound
 	}
 	return s.repo.Delete(ctx, namespace, fieldID)
-}
-
-func (s *FieldService) validateField(field *domain.Field) error {
-	if field == nil {
-		return domain.ErrValidationError
-	}
-
-	if strings.TrimSpace(field.FieldID) == "" {
-		return domain.ErrInvalidFieldID
-	}
-
-	if _, valid := allowedFieldTypes[field.Type]; !valid {
-		return domain.ErrInvalidFieldType
-	}
-
-	// Description can be nil/empty as per documentation
-	return nil
 }
