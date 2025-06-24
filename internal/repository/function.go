@@ -12,10 +12,10 @@ import (
 
 // FunctionRepository implements domain.FunctionRepository
 type FunctionRepository struct {
-	db *db.Queries
+	db db.Querier
 }
 
-func NewFunctionRepository(q *db.Queries) *FunctionRepository {
+func NewFunctionRepository(q db.Querier) *FunctionRepository {
 	return &FunctionRepository{db: q}
 }
 

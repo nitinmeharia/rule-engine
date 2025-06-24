@@ -13,7 +13,11 @@ import (
 	importedJwt "github.com/golang-jwt/jwt/v4"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rule-engine/internal/config"
+	"github.com/rule-engine/internal/execution"
 	"github.com/rule-engine/internal/infra/db"
+	"github.com/rule-engine/internal/infra/logger"
+	modelsdb "github.com/rule-engine/internal/models/db"
+	"github.com/rule-engine/internal/repository"
 	"github.com/rule-engine/internal/server"
 	"github.com/stretchr/testify/suite"
 )
@@ -75,11 +79,36 @@ func (suite *IntegrationTestSuite) SetupSuite() {
 	pool, err := db.New(cfg.Database)
 	suite.Require().NoError(err)
 
+	// Initialize logger
+	log, err := logger.New(cfg.Logger)
+	suite.Require().NoError(err)
+
+	// Initialize repositories
+	queries := modelsdb.New(pool)
+	// namespaceRepo := repository.NewNamespaceRepository(queries)
+	fieldRepo := repository.NewFieldRepository(queries)
+	functionRepo := repository.NewFunctionRepository(queries)
+	ruleRepo := repository.NewRuleRepository(queries)
+	terminalRepo := repository.NewTerminalRepository(queries)
+	workflowRepo := repository.NewWorkflowRepository(queries)
+	cacheRepo := repository.NewCacheRepository(queries)
+
+	// Initialize execution engine
+	engine := execution.NewEngine(
+		cacheRepo,
+		ruleRepo,
+		workflowRepo,
+		fieldRepo,
+		functionRepo,
+		terminalRepo,
+		time.Duration(cfg.Cache.RefreshIntervalSec)*time.Second,
+	)
+
 	// Clean up any existing test data
 	suite.cleanupTestData(pool)
 
-	// Create test server (without starting it)
-	srv, err := server.New(cfg, pool, nil) // logger can be nil for tests
+	// Create test server
+	srv, err := server.New(cfg, pool, log, engine)
 	suite.Require().NoError(err)
 
 	suite.pool = pool

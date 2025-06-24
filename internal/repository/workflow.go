@@ -12,11 +12,11 @@ import (
 
 // WorkflowRepository implements domain.WorkflowRepository
 type WorkflowRepository struct {
-	queries *db.Queries
+	queries db.Querier
 }
 
 // NewWorkflowRepository creates a new workflow repository
-func NewWorkflowRepository(queries *db.Queries) *WorkflowRepository {
+func NewWorkflowRepository(queries db.Querier) *WorkflowRepository {
 	return &WorkflowRepository{
 		queries: queries,
 	}

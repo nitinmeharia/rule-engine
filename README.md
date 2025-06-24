@@ -103,12 +103,4 @@ curl -X POST http://localhost:8080/v1/namespaces \
 
 ---
 
-## Architecture & Design
-
-- High-level architecture: [docs/HLD.txt](docs/HLD.txt)
-- Detailed component design & database schema: [docs/LLD.txt](docs/LLD.txt)
-- Code structure overview: [docs/CODE_STRUCTURE.md](docs/CODE_STRUCTURE.md)
-
----
-
 **Generic Rule Engine** — Fast, reliable, and maintainable rule execution for modern applications.

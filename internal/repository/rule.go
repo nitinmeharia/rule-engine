@@ -10,10 +10,10 @@ import (
 
 // RuleRepository implements domain.RuleRepository
 type RuleRepository struct {
-	db *db.Queries
+	db db.Querier
 }
 
-func NewRuleRepository(q *db.Queries) *RuleRepository {
+func NewRuleRepository(q db.Querier) *RuleRepository {
 	return &RuleRepository{db: q}
 }
 

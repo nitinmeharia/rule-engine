@@ -11,11 +11,13 @@ import (
 
 // FieldRepository defines DB operations for fields
 type FieldRepository struct {
-	db *db.Queries
+	q db.Querier
 }
 
-func NewFieldRepository(q *db.Queries) *FieldRepository {
-	return &FieldRepository{db: q}
+func NewFieldRepository(q db.Querier) *FieldRepository {
+	return &FieldRepository{
+		q: q,
+	}
 }
 
 func (r *FieldRepository) Create(ctx context.Context, field *domain.Field) error {
@@ -24,7 +26,7 @@ func (r *FieldRepository) Create(ctx context.Context, field *domain.Field) error
 		description = &field.Description
 	}
 
-	err := r.db.CreateField(ctx, db.CreateFieldParams{
+	err := r.q.CreateField(ctx, db.CreateFieldParams{
 		Namespace:   field.Namespace,
 		FieldID:     field.FieldID,
 		Type:        &field.Type, // Type is required but nullable in DB
@@ -40,7 +42,7 @@ func (r *FieldRepository) Create(ctx context.Context, field *domain.Field) error
 }
 
 func (r *FieldRepository) GetByID(ctx context.Context, namespace, fieldID string) (*domain.Field, error) {
-	f, err := r.db.GetField(ctx, db.GetFieldParams{
+	f, err := r.q.GetField(ctx, db.GetFieldParams{
 		Namespace: namespace,
 		FieldID:   fieldID,
 	})
@@ -63,7 +65,7 @@ func (r *FieldRepository) Get(ctx context.Context, namespace, fieldID string) (*
 }
 
 func (r *FieldRepository) List(ctx context.Context, namespace string) ([]*domain.Field, error) {
-	rows, err := r.db.ListFields(ctx, namespace)
+	rows, err := r.q.ListFields(ctx, namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +84,7 @@ func (r *FieldRepository) List(ctx context.Context, namespace string) ([]*domain
 }
 
 func (r *FieldRepository) Update(ctx context.Context, field *domain.Field) error {
-	return r.db.UpdateField(ctx, db.UpdateFieldParams{
+	return r.q.UpdateField(ctx, db.UpdateFieldParams{
 		Namespace:   field.Namespace,
 		FieldID:     field.FieldID,
 		Type:        &field.Type,
@@ -92,14 +94,14 @@ func (r *FieldRepository) Update(ctx context.Context, field *domain.Field) error
 }
 
 func (r *FieldRepository) Delete(ctx context.Context, namespace, fieldID string) error {
-	return r.db.DeleteField(ctx, db.DeleteFieldParams{
+	return r.q.DeleteField(ctx, db.DeleteFieldParams{
 		Namespace: namespace,
 		FieldID:   fieldID,
 	})
 }
 
 func (r *FieldRepository) Exists(ctx context.Context, namespace, fieldID string) (bool, error) {
-	exists, err := r.db.FieldExists(ctx, db.FieldExistsParams{
+	exists, err := r.q.FieldExists(ctx, db.FieldExistsParams{
 		Namespace: namespace,
 		FieldID:   fieldID,
 	})
@@ -107,12 +109,12 @@ func (r *FieldRepository) Exists(ctx context.Context, namespace, fieldID string)
 }
 
 func (r *FieldRepository) CountByNamespace(ctx context.Context, namespace string) (int64, error) {
-	count, err := r.db.CountFieldsByNamespace(ctx, namespace)
+	count, err := r.q.CountFieldsByNamespace(ctx, namespace)
 	return count, err
 }
 
 func (r *FieldRepository) NamespaceExists(ctx context.Context, namespace string) (bool, error) {
-	ns, err := r.db.GetNamespace(ctx, namespace)
+	ns, err := r.q.GetNamespace(ctx, namespace)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil

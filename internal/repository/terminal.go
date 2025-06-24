@@ -14,10 +14,8 @@ type TerminalRepository struct {
 }
 
 // NewTerminalRepository creates a new terminal repository
-func NewTerminalRepository(queries db.Querier) domain.TerminalRepository {
-	return &TerminalRepository{
-		queries: queries,
-	}
+func NewTerminalRepository(queries db.Querier) *TerminalRepository {
+	return &TerminalRepository{queries: queries}
 }
 
 // Create creates a new terminal
