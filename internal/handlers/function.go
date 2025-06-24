@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -183,4 +184,29 @@ func (h *FunctionHandler) PublishFunction(c *gin.Context) {
 
 	response := h.responseHandler.ConvertFunctionToResponse(function)
 	h.responseHandler.OK(c, response)
+}
+
+// DeleteFunction handles DELETE /v1/namespaces/{namespace}/functions/{functionId}/versions/{version}
+func (h *FunctionHandler) DeleteFunction(c *gin.Context) {
+	namespace := c.Param("id")
+	functionID := c.Param("functionId")
+	versionStr := c.Param("version")
+
+	if namespace == "" || functionID == "" || versionStr == "" {
+		h.responseHandler.BadRequest(c, "Namespace, function ID, and version are required")
+		return
+	}
+
+	// Parse version
+	var version int32
+	if _, err := fmt.Sscanf(versionStr, "%d", &version); err != nil {
+		h.responseHandler.BadRequest(c, "Invalid version format")
+		return
+	}
+
+	// Attempt to delete the function
+	// Always return 204 No Content regardless of whether the function exists
+	_ = h.functionService.DeleteFunction(c.Request.Context(), namespace, functionID, version)
+
+	c.Status(http.StatusNoContent)
 }

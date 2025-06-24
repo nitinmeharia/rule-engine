@@ -514,6 +514,91 @@ test_rules_api() {
     make_request "DELETE" "/v1/namespaces/rules-test-ns" "$admin_token" "" "204" "Delete rules test namespace"
 }
 
+# Function to test workflows API
+test_workflows_api() {
+    print_status "INFO" "Testing Workflows API"
+    echo "=================================="
+    local admin_token=$(generate_jwt_token "$CLIENT_ID" "$ADMIN_ROLE")
+    local viewer_token=$(generate_jwt_token "$CLIENT_ID" "$VIEWER_ROLE")
+    local executor_token=$(generate_jwt_token "$CLIENT_ID" "$EXECUTOR_ROLE")
+
+    # Create a namespace for workflows
+    local ns_data='{"id": "workflows-test-ns", "description": "Namespace for comprehensive workflows testing"}'
+    make_request "POST" "/v1/namespaces" "$admin_token" "$ns_data" "201" "Create workflows test namespace"
+
+    # Create fields, functions, and terminals as dependencies
+    local field_a='{"fieldId": "input_a", "type": "number", "description": "Input A"}'
+    local field_b='{"fieldId": "input_b", "type": "number", "description": "Input B"}'
+    make_request "POST" "/v1/namespaces/workflows-test-ns/fields" "$admin_token" "$field_a" "201" "Create field: input_a"
+    make_request "POST" "/v1/namespaces/workflows-test-ns/fields" "$admin_token" "$field_b" "201" "Create field: input_b"
+
+    local fn_sum='{"id": "sum_fn", "type": "sum", "args": ["input_a", "input_b"]}'
+    make_request "POST" "/v1/namespaces/workflows-test-ns/functions" "$admin_token" "$fn_sum" "201" "Create function: sum_fn"
+    make_request "POST" "/v1/namespaces/workflows-test-ns/functions/sum_fn/publish" "$admin_token" "" "200" "Publish function: sum_fn"
+
+    local terminal_approve='{"terminalId": "approve"}'
+    make_request "POST" "/v1/namespaces/workflows-test-ns/terminals" "$admin_token" "$terminal_approve" "201" "Create terminal: approve"
+
+    # Create a workflow (draft)
+    local steps='{"step1": {"type": "function", "functionId": "sum_fn", "next": "step2"}, "step2": {"type": "terminal", "terminalId": "approve"}}'
+    local workflow_data='{"workflowId": "wf1", "startAt": "step1", "steps": '"$steps"'}'
+    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows" "$admin_token" "$workflow_data" "201" "Create workflow (draft)"
+
+    # Retrieve workflow (should return draft)
+    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows/wf1" "$admin_token" "" "200" "Get workflow (draft)"
+
+    # List workflows
+    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows" "$admin_token" "" "200" "List workflows"
+
+    # Update workflow draft
+    local updated_steps='{"step1": {"type": "function", "functionId": "sum_fn", "next": "step2"}, "step2": {"type": "terminal", "terminalId": "approve"}}'
+    local update_data='{"steps": '"$updated_steps"'}'
+    make_request "PUT" "/v1/namespaces/workflows-test-ns/workflows/wf1/versions/draft" "$admin_token" "$update_data" "200" "Update workflow draft"
+
+    # Publish workflow
+    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows/wf1/versions/1/publish" "$admin_token" "" "200" "Publish workflow"
+
+    # Retrieve workflow (should return active)
+    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows/wf1" "$admin_token" "" "200" "Get workflow (active)"
+
+    # List workflow versions
+    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows/wf1/versions" "$admin_token" "" "200" "List workflow versions"
+
+    # Test cyclic dependency (should fail)
+    local cyclic_steps='{"step1": {"type": "function", "functionId": "sum_fn", "next": "step2"}, "step2": {"type": "function", "functionId": "sum_fn", "next": "step1"}}'
+    local cyclic_workflow='{"workflowId": "cyclic-wf", "startAt": "step1", "steps": '"$cyclic_steps"'}'
+    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows" "$admin_token" "$cyclic_workflow" "400" "Create workflow with cyclic dependency (should fail)"
+
+    # Test duplicate workflow creation (should fail)
+    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows" "$admin_token" "$workflow_data" "409" "Create duplicate workflow (should fail)"
+
+    # Test invalid workflow (missing startAt)
+    local invalid_workflow='{"workflowId": "invalid-wf", "steps": '"$steps"'}'
+    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows" "$admin_token" "$invalid_workflow" "400" "Create workflow with missing startAt (should fail)"
+
+    # Test get non-existent workflow
+    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows/non-existent" "$admin_token" "" "404" "Get non-existent workflow"
+
+    # Test RBAC: viewer cannot create workflow
+    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows" "$viewer_token" "$workflow_data" "403" "Viewer cannot create workflow"
+
+    # Test RBAC: viewer can list and get workflows
+    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows" "$viewer_token" "" "200" "Viewer can list workflows"
+    make_request "GET" "/v1/namespaces/workflows-test-ns/workflows/wf1" "$viewer_token" "" "200" "Viewer can get workflow"
+
+    # Test RBAC: executor cannot create workflow
+    make_request "POST" "/v1/namespaces/workflows-test-ns/workflows" "$executor_token" "$workflow_data" "403" "Executor cannot create workflow"
+
+    # Test delete workflow
+    make_request "DELETE" "/v1/namespaces/workflows-test-ns/workflows/wf1/versions/1" "$admin_token" "" "204" "Delete workflow version 1"
+
+    # Test delete non-existent workflow
+    make_request "DELETE" "/v1/namespaces/workflows-test-ns/workflows/non-existent/versions/1" "$admin_token" "" "404" "Delete non-existent workflow"
+
+    # Clean up
+    make_request "DELETE" "/v1/namespaces/workflows-test-ns" "$admin_token" "" "204" "Delete workflows test namespace"
+}
+
 # Function to test terminals API
 # This suite tests the complete terminal lifecycle: create, read, list, delete
 # 
@@ -767,13 +852,13 @@ main() {
 
     # Clean up any existing test data
     bash ./scripts/cleanup-test-data.sh
-
+    
     # Wait for server to be ready
     if ! wait_for_server; then
         print_status "FAIL" "Cannot proceed with tests - server not available"
         exit 1
     fi
-
+    
     # Run all test suites
     test_health_endpoint
     test_authentication
@@ -781,12 +866,13 @@ main() {
     test_fields_api
     test_functions_api
     test_rules_api
+    test_workflows_api
     test_terminals_api
     test_error_handling
     test_rbac
     test_edge_cases
     test_performance
-
+    
     # Print summary
     print_summary
 }

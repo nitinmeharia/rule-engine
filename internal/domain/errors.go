@@ -41,6 +41,9 @@ const (
 	ErrCodeInvalidWorkflowID       = "INVALID_WORKFLOW_ID"
 	ErrCodeInvalidWorkflowStartAt  = "INVALID_WORKFLOW_START_AT"
 	ErrCodeWorkflowExecutionFailed = "WORKFLOW_EXECUTION_FAILED"
+	ErrCodeWorkflowNotDraft        = "WORKFLOW_NOT_DRAFT"
+	ErrCodeWorkflowNotActive       = "WORKFLOW_NOT_ACTIVE"
+	ErrCodeWorkflowActive          = "WORKFLOW_ACTIVE"
 
 	// Terminal errors
 	ErrCodeTerminalAlreadyExists = "TERMINAL_ALREADY_EXISTS"
@@ -186,6 +189,9 @@ var (
 	ErrInvalidWorkflowID       = NewAPIError(ErrCodeInvalidWorkflowID, "Workflow ID is required")
 	ErrInvalidWorkflowStartAt  = NewAPIError(ErrCodeInvalidWorkflowStartAt, "Invalid workflow start at")
 	ErrWorkflowExecutionFailed = NewAPIError(ErrCodeWorkflowExecutionFailed, "Workflow execution failed")
+	ErrWorkflowNotDraft        = NewAPIError(ErrCodeWorkflowNotDraft, "Workflow is not in draft status")
+	ErrWorkflowNotActive       = NewAPIError(ErrCodeWorkflowNotActive, "Workflow is not active")
+	ErrWorkflowActive          = NewAPIError(ErrCodeWorkflowActive, "Cannot delete active workflow")
 
 	ErrTerminalAlreadyExists = NewAPIError(ErrCodeTerminalAlreadyExists, "Terminal already exists")
 	ErrTerminalNotFound      = NewAPIError(ErrCodeTerminalNotFound, "Terminal not found")

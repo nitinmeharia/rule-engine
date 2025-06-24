@@ -27,6 +27,7 @@ type Server struct {
 	functionHandler  *handlers.FunctionHandler
 	ruleHandler      *handlers.RuleHandler
 	terminalHandler  *handlers.TerminalHandler
+	workflowHandler  *handlers.WorkflowHandler
 	address          string
 }
 
@@ -61,6 +62,7 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 	functionRepo := repository.NewFunctionRepository(queries)
 	ruleRepo := repository.NewRuleRepository(queries)
 	terminalRepo := repository.NewTerminalRepository(queries)
+	workflowRepo := repository.NewWorkflowRepository(queries)
 
 	// Initialize services
 	namespaceService := service.NewNamespaceService(namespaceRepo)
@@ -68,6 +70,7 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 	functionService := service.NewFunctionService(functionRepo)
 	ruleService := service.NewRuleService(ruleRepo, functionRepo, fieldRepo)
 	terminalService := service.NewTerminalService(terminalRepo, namespaceRepo)
+	workflowService := service.NewWorkflowService(workflowRepo, ruleRepo, terminalRepo)
 
 	// Initialize handlers
 	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
@@ -75,6 +78,7 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 	functionHandler := handlers.NewFunctionHandler(functionService)
 	ruleHandler := handlers.NewRuleHandler(ruleService)
 	terminalHandler := handlers.NewTerminalHandler(terminalService)
+	workflowHandler := handlers.NewWorkflowHandler(workflowService)
 
 	// Create server instance first
 	server := &Server{
@@ -87,6 +91,7 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 		functionHandler:  functionHandler,
 		ruleHandler:      ruleHandler,
 		terminalHandler:  terminalHandler,
+		workflowHandler:  workflowHandler,
 		address:          cfg.Server.GetServerAddress(),
 	}
 
@@ -114,6 +119,7 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 			namespaces.GET("/:id/functions/:functionId", RequireAnyRole("admin", "viewer", "executor"), functionHandler.GetFunction)
 			namespaces.PUT("/:id/functions/:functionId/versions/draft", RequireRole("admin"), functionHandler.UpdateFunction)
 			namespaces.POST("/:id/functions/:functionId/publish", RequireRole("admin"), functionHandler.PublishFunction)
+			namespaces.DELETE("/:id/functions/:functionId/versions/:version", RequireRole("admin"), functionHandler.DeleteFunction)
 
 			// Rule routes within namespace - nested under namespace ID
 			namespaces.GET("/:id/rules", RequireAnyRole("admin", "viewer", "executor"), ruleHandler.ListRules)
@@ -130,6 +136,18 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 			namespaces.POST("/:id/terminals", RequireRole("admin"), terminalHandler.CreateTerminal)
 			namespaces.GET("/:id/terminals/:terminalId", RequireAnyRole("admin", "viewer", "executor"), terminalHandler.GetTerminal)
 			namespaces.DELETE("/:id/terminals/:terminalId", RequireRole("admin"), terminalHandler.DeleteTerminal)
+
+			// Workflow routes within namespace - nested under namespace ID
+			namespaces.GET("/:id/workflows", RequireAnyRole("admin", "viewer", "executor"), workflowHandler.ListWorkflows)
+			namespaces.POST("/:id/workflows", RequireRole("admin"), workflowHandler.CreateWorkflow)
+			namespaces.GET("/:id/workflows/:workflowId", RequireAnyRole("admin", "viewer", "executor"), workflowHandler.GetWorkflow)
+			namespaces.GET("/:id/workflows/:workflowId/versions/:version", RequireAnyRole("admin", "viewer", "executor"), workflowHandler.GetWorkflowVersion)
+			namespaces.PUT("/:id/workflows/:workflowId/versions/:version", RequireRole("admin"), workflowHandler.UpdateWorkflow)
+			namespaces.POST("/:id/workflows/:workflowId/versions/:version/publish", RequireRole("admin"), workflowHandler.PublishWorkflow)
+			namespaces.POST("/:id/workflows/:workflowId/deactivate", RequireRole("admin"), workflowHandler.DeactivateWorkflow)
+			namespaces.DELETE("/:id/workflows/:workflowId/versions/:version", RequireRole("admin"), workflowHandler.DeleteWorkflow)
+			namespaces.GET("/:id/workflows/active", RequireAnyRole("admin", "viewer", "executor"), workflowHandler.ListActiveWorkflows)
+			namespaces.GET("/:id/workflows/:workflowId/versions", RequireAnyRole("admin", "viewer", "executor"), workflowHandler.ListWorkflowVersions)
 		}
 	}
 

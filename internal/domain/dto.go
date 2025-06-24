@@ -45,6 +45,17 @@ type CreateTerminalRequest struct {
 	TerminalID string `json:"terminalId" binding:"required"`
 }
 
+type CreateWorkflowRequest struct {
+	ID      string          `json:"id" binding:"required"`
+	StartAt string          `json:"startAt" binding:"required"`
+	Steps   json.RawMessage `json:"steps" binding:"required"`
+}
+
+type UpdateWorkflowRequest struct {
+	StartAt string          `json:"startAt" binding:"required"`
+	Steps   json.RawMessage `json:"steps" binding:"required"`
+}
+
 // Response DTOs
 type NamespaceResponse struct {
 	ID          string    `json:"id"`
@@ -109,6 +120,22 @@ type TerminalResponse struct {
 	TerminalID string    `json:"terminalId"`
 	CreatedAt  time.Time `json:"createdAt"`
 	CreatedBy  string    `json:"createdBy"`
+}
+
+type WorkflowResponse struct {
+	ID          string          `json:"id"`
+	Version     int32           `json:"version"`
+	Status      string          `json:"status"`
+	StartAt     string          `json:"startAt"`
+	Steps       json.RawMessage `json:"steps"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	CreatedBy   string          `json:"createdBy"`
+	PublishedAt *time.Time      `json:"publishedAt,omitempty"`
+	PublishedBy *string         `json:"publishedBy,omitempty"`
+}
+
+type PublishWorkflowResponse struct {
+	Status string `json:"status"`
 }
 
 // Error Response

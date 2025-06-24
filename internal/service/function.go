@@ -15,6 +15,7 @@ type FunctionServiceInterface interface {
 	ListFunctions(ctx context.Context, namespace string) ([]*domain.Function, error)
 	UpdateFunction(ctx context.Context, namespace, functionID string, function *domain.Function) error
 	PublishFunction(ctx context.Context, namespace, functionID, clientID string) error
+	DeleteFunction(ctx context.Context, namespace, functionID string, version int32) error
 }
 
 // FunctionService handles business logic for functions

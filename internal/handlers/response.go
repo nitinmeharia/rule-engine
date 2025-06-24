@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rule-engine/internal/domain"
@@ -84,82 +87,46 @@ func (h *ResponseHandler) MapDomainErrorToResponse(c *gin.Context, err error) {
 		return
 	}
 
+	// Debug logging to see what error we're getting
+	fmt.Printf("[DEBUG] MapDomainErrorToResponse called with error: %v\n", err)
+	fmt.Printf("[DEBUG] Error type: %T\n", err)
+
 	// Check if it's a domain APIError
 	if apiErr, ok := err.(*domain.APIError); ok {
+		fmt.Printf("[DEBUG] Found domain APIError: %+v\n", apiErr)
 		c.JSON(apiErr.HTTPStatus(), apiErr)
 		return
 	}
 
-	// Handle common domain errors
-	switch err {
-	case domain.ErrNamespaceAlreadyExists:
-		h.Conflict(c, "Namespace already exists")
-	case domain.ErrNamespaceNotFound:
-		h.NotFound(c, "Namespace not found")
-	case domain.ErrInvalidNamespaceID:
-		h.BadRequest(c, "Invalid namespace ID")
-	case domain.ErrInvalidDescription:
-		h.BadRequest(c, "Invalid description")
-	case domain.ErrFieldAlreadyExists:
-		h.Conflict(c, "Field already exists")
-	case domain.ErrFieldNotFound:
-		h.NotFound(c, "Field not found")
-	case domain.ErrInvalidFieldID:
-		h.BadRequest(c, "Invalid field ID")
-	case domain.ErrInvalidFieldType:
-		h.BadRequest(c, "Invalid field type")
-	case domain.ErrFunctionAlreadyExists:
-		h.Conflict(c, "Function already exists")
-	case domain.ErrFunctionNotFound:
-		h.NotFound(c, "Function not found")
-	case domain.ErrInvalidFunctionID:
-		h.BadRequest(c, "Invalid function ID")
-	case domain.ErrInvalidFunctionType:
-		h.BadRequest(c, "Invalid function type")
-	case domain.ErrInvalidFunctionArgs:
-		h.BadRequest(c, "Invalid function arguments")
-	case domain.ErrFunctionNotActive:
-		h.BadRequest(c, "Function not active")
-	case domain.ErrRuleAlreadyExists:
-		h.Conflict(c, "Rule already exists")
-	case domain.ErrRuleNotFound:
-		h.NotFound(c, "Rule not found")
-	case domain.ErrInvalidRuleID:
-		h.BadRequest(c, "Invalid rule ID")
-	case domain.ErrInvalidRuleLogic:
-		h.BadRequest(c, "Invalid rule logic")
-	case domain.ErrInvalidRuleConditions:
-		h.BadRequest(c, "Invalid rule conditions")
-	case domain.ErrRuleNotActive:
-		h.BadRequest(c, "Rule not active")
-	case domain.ErrWorkflowAlreadyExists:
-		h.Conflict(c, "Workflow already exists")
-	case domain.ErrWorkflowNotFound:
-		h.NotFound(c, "Workflow not found")
-	case domain.ErrInvalidWorkflowID:
-		h.BadRequest(c, "Invalid workflow ID")
-	case domain.ErrTerminalAlreadyExists:
-		h.Conflict(c, "Terminal already exists")
-	case domain.ErrTerminalNotFound:
-		h.NotFound(c, "Terminal not found")
-	case domain.ErrInvalidTerminalID:
-		h.BadRequest(c, "Invalid terminal ID")
-	case domain.ErrValidationError:
-		h.BadRequest(c, "Validation error")
-	case domain.ErrPreconditionFailed:
-		c.JSON(http.StatusPreconditionFailed, domain.ErrorResponse{
-			Code:    "PRECONDITION_FAILED",
-			Error:   "Precondition Failed",
-			Message: "Precondition failed",
-		})
-	case domain.ErrInternalError:
-		h.InternalServerError(c, "Internal server error")
-	case domain.ErrListError:
-		h.InternalServerError(c, "Failed to list resources")
-	default:
-		// Fallback for unknown errors
-		h.InternalServerError(c, "An unexpected error occurred")
+	// Recursively unwrap and check error messages for dependency validation
+	unwrapErr := err
+	for unwrapErr != nil {
+		errMsg := unwrapErr.Error()
+		fmt.Printf("[DEBUG] Checking error message: %s\n", errMsg)
+		if strings.Contains(errMsg, "not found") ||
+			strings.Contains(errMsg, "is not active") ||
+			strings.Contains(errMsg, "invalid dependency") ||
+			strings.Contains(errMsg, "dependency") ||
+			strings.Contains(errMsg, "no rows in result set") ||
+			strings.Contains(errMsg, "cyclic dependency") {
+			fmt.Printf("[DEBUG] Found dependency validation error, returning 400\n")
+			c.JSON(http.StatusBadRequest, gin.H{
+				"code":    "VALIDATION_ERROR",
+				"error":   "BAD_REQUEST",
+				"message": errMsg,
+			})
+			return
+		}
+		unwrapErr = errors.Unwrap(unwrapErr)
 	}
+
+	// Default to internal server error
+	fmt.Printf("[DEBUG] No specific error mapping found, returning 500\n")
+	c.JSON(http.StatusInternalServerError, gin.H{
+		"code":    "INTERNAL_SERVER_ERROR",
+		"error":   "INTERNAL_SERVER_ERROR",
+		"message": "An unexpected error occurred",
+	})
 }
 
 // ConvertNamespaceToResponse converts a domain Namespace to NamespaceResponse
@@ -249,4 +216,28 @@ func (h *ResponseHandler) ConvertTerminalToResponse(terminal *domain.Terminal) d
 		CreatedAt:  terminal.CreatedAt,
 		CreatedBy:  terminal.CreatedBy,
 	}
+}
+
+// ConvertWorkflowToResponse converts a domain Workflow to WorkflowResponse
+func (h *ResponseHandler) ConvertWorkflowToResponse(workflow *domain.Workflow) domain.WorkflowResponse {
+	return domain.WorkflowResponse{
+		ID:          workflow.WorkflowID,
+		Version:     workflow.Version,
+		Status:      workflow.Status,
+		StartAt:     workflow.StartAt,
+		Steps:       workflow.Steps,
+		CreatedAt:   workflow.CreatedAt,
+		CreatedBy:   workflow.CreatedBy,
+		PublishedAt: workflow.PublishedAt,
+		PublishedBy: workflow.PublishedBy,
+	}
+}
+
+// ConvertWorkflowsToResponse converts a slice of domain Workflows to WorkflowResponse slice
+func (h *ResponseHandler) ConvertWorkflowsToResponse(workflows []*domain.Workflow) []domain.WorkflowResponse {
+	response := make([]domain.WorkflowResponse, 0, len(workflows))
+	for _, workflow := range workflows {
+		response = append(response, h.ConvertWorkflowToResponse(workflow))
+	}
+	return response
 }

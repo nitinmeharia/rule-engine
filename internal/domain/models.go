@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -235,7 +236,85 @@ func (w *Workflow) Validate() error {
 		return ErrInvalidWorkflowStartAt
 	}
 
+	// Validate workflow steps for cyclic dependencies
+	if err := w.validateWorkflowSteps(); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// validateWorkflowSteps validates that the workflow steps don't contain cyclic dependencies
+func (w *Workflow) validateWorkflowSteps() error {
+	if w.Steps == nil {
+		return nil
+	}
+
+	var steps map[string]interface{}
+	if err := json.Unmarshal(w.Steps, &steps); err != nil {
+		return fmt.Errorf("invalid workflow steps format: %w", err)
+	}
+
+	// Build adjacency list for workflow steps
+	adjacencyList := make(map[string][]string)
+
+	// Initialize adjacency list with all step names
+	for stepName := range steps {
+		adjacencyList[stepName] = []string{}
+	}
+
+	// Build connections between steps
+	for stepName, stepData := range steps {
+		stepMap, ok := stepData.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		stepType, _ := stepMap["type"].(string)
+		if stepType == "rule" {
+			// For rule steps, check onTrue and onFalse connections
+			if onTrue, exists := stepMap["onTrue"].(string); exists && onTrue != "" {
+				adjacencyList[stepName] = append(adjacencyList[stepName], onTrue)
+			}
+			if onFalse, exists := stepMap["onFalse"].(string); exists && onFalse != "" {
+				adjacencyList[stepName] = append(adjacencyList[stepName], onFalse)
+			}
+		}
+		// Terminal steps don't have outgoing connections, so no need to add them
+	}
+
+	// Check for cycles using DFS
+	visited := make(map[string]bool)
+	recStack := make(map[string]bool)
+
+	for stepName := range adjacencyList {
+		if !visited[stepName] {
+			if hasCycle(stepName, adjacencyList, visited, recStack) {
+				return fmt.Errorf("cyclic dependency detected in workflow steps")
+			}
+		}
+	}
+
+	return nil
+}
+
+// hasCycle performs DFS to detect cycles in the workflow graph
+func hasCycle(stepName string, adjacencyList map[string][]string, visited, recStack map[string]bool) bool {
+	visited[stepName] = true
+	recStack[stepName] = true
+
+	for _, neighbor := range adjacencyList[stepName] {
+		if !visited[neighbor] {
+			if hasCycle(neighbor, adjacencyList, visited, recStack) {
+				return true
+			}
+		} else if recStack[neighbor] {
+			return true
+		}
+	}
+
+	recStack[stepName] = false
+	return false
 }
 
 // Terminal represents a terminal node in workflows
