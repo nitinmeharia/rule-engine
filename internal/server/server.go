@@ -64,7 +64,7 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 	namespaceService := service.NewNamespaceService(namespaceRepo)
 	fieldService := service.NewFieldService(fieldRepo)
 	functionService := service.NewFunctionService(functionRepo)
-	ruleService := service.NewRuleService(ruleRepo)
+	ruleService := service.NewRuleService(ruleRepo, functionRepo, fieldRepo)
 
 	// Initialize handlers
 	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
