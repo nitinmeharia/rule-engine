@@ -2,11 +2,8 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"strings"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/rule-engine/internal/domain"
 	"github.com/rule-engine/internal/models/db"
 )
@@ -45,10 +42,7 @@ func (r *NamespaceRepository) Create(ctx context.Context, namespace *domain.Name
 func (r *NamespaceRepository) GetByID(ctx context.Context, id string) (*domain.Namespace, error) {
 	ns, err := r.queries.GetNamespace(ctx, id)
 	if err != nil {
-		if err == sql.ErrNoRows || err == pgx.ErrNoRows || strings.Contains(err.Error(), "no rows in result set") {
-			return nil, domain.ErrNotFound
-		}
-		return nil, fmt.Errorf("failed to get namespace: %w", err)
+		return nil, err
 	}
 
 	description := ""

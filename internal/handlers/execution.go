@@ -95,47 +95,14 @@ func (h *ExecutionHandler) ExecuteWorkflow(c *gin.Context) {
 }
 
 // mapError maps domain errors to HTTP responses
-func (h *ExecutionHandler) mapError(err error) (int, ErrorResponse) {
-	switch err {
-	case domain.ErrNotFound:
-		return http.StatusNotFound, ErrorResponse{
-			Error: "Resource not found",
-			Code:  "NOT_FOUND",
-		}
-	case domain.ErrInvalidInput:
-		return http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid input",
-			Code:  "INVALID_INPUT",
-		}
-	case domain.ErrValidation:
-		return http.StatusBadRequest, ErrorResponse{
-			Error: "Validation failed",
-			Code:  "VALIDATION_ERROR",
-		}
-	case domain.ErrUnauthorized:
-		return http.StatusUnauthorized, ErrorResponse{
-			Error: "Unauthorized",
-			Code:  "UNAUTHORIZED",
-		}
-	case domain.ErrForbidden:
-		return http.StatusForbidden, ErrorResponse{
-			Error: "Forbidden",
-			Code:  "FORBIDDEN",
-		}
-	default:
-		// Check if it's an execution error
-		if isExecutionError(err) {
-			return http.StatusUnprocessableEntity, ErrorResponse{
-				Error: err.Error(),
-				Code:  "EXECUTION_ERROR",
-			}
-		}
-
-		return http.StatusInternalServerError, ErrorResponse{
-			Error: "Internal server error",
-			Code:  "INTERNAL_ERROR",
-		}
+func (h *ExecutionHandler) mapError(err error) (int, interface{}) {
+	apiErr, ok := err.(*domain.APIError)
+	if ok {
+		return apiErr.HTTPStatus(), apiErr
 	}
+
+	// Fallback for non-APIError errors
+	return http.StatusInternalServerError, domain.ErrInternalError
 }
 
 // isExecutionError checks if error is an execution error

@@ -37,9 +37,9 @@ cache:
 jwt:
   secret: "dev-secret-key-change-in-production"
   tokenExpiration: 24h
-  requiredClaims: ["sub", "exp"]
-  validAudiences: ["rule-engine"]
-  validIssuers: ["auth-service"]
+  requiredClaims: ["clientId", "role"]
+  validAudiences: []
+  validIssuers: []
   skipExpiryCheck: false
 
 metrics:

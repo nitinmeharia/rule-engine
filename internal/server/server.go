@@ -23,6 +23,7 @@ type Server struct {
 	db               *pgxpool.Pool
 	logger           *logger.Logger
 	namespaceHandler *handlers.NamespaceHandler
+	fieldHandler     *handlers.FieldHandler
 	address          string
 }
 
@@ -38,6 +39,7 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 
 	// Add comprehensive logging and error handling middleware
 	router.Use(
+		DebugErrorMiddleware(),      // Debug error catching
 		ErrorRecoveryMiddleware(),   // Panic recovery with stack traces
 		ContextLoggingMiddleware(),  // Request ID and context logging
 		RequestLoggingMiddleware(),  // Request body logging
@@ -52,12 +54,15 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 
 	// Initialize repositories
 	namespaceRepo := repository.NewNamespaceRepository(queries)
+	fieldRepo := repository.NewFieldRepository(queries)
 
 	// Initialize services
 	namespaceService := service.NewNamespaceService(namespaceRepo)
+	fieldService := service.NewFieldService(fieldRepo)
 
 	// Initialize handlers
 	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
+	fieldHandler := handlers.NewFieldHandler(fieldService)
 
 	// Create server instance first
 	server := &Server{
@@ -66,6 +71,7 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 		db:               database,
 		logger:           log,
 		namespaceHandler: namespaceHandler,
+		fieldHandler:     fieldHandler,
 		address:          cfg.Server.GetServerAddress(),
 	}
 
@@ -82,6 +88,10 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 			namespaces.POST("", RequireRole("admin"), namespaceHandler.CreateNamespace)
 			namespaces.GET("/:id", RequireAnyRole("admin", "viewer", "executor"), namespaceHandler.GetNamespace)
 			namespaces.DELETE("/:id", RequireRole("admin"), namespaceHandler.DeleteNamespace)
+
+			// Field routes within namespace - nested under namespace ID
+			namespaces.GET("/:id/fields", RequireAnyRole("admin", "viewer", "executor"), fieldHandler.ListFields)
+			namespaces.POST("/:id/fields", RequireRole("admin"), fieldHandler.CreateField)
 		}
 	}
 

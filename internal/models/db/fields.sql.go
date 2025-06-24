@@ -25,15 +25,16 @@ func (q *Queries) CountFieldsByNamespace(ctx context.Context, namespace string) 
 }
 
 const CreateField = `-- name: CreateField :exec
-INSERT INTO fields (namespace, field_id, type, created_by)
-VALUES ($1, $2, $3, $4)
+INSERT INTO fields (namespace, field_id, type, description, created_by)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type CreateFieldParams struct {
-	Namespace string  `json:"namespace"`
-	FieldID   string  `json:"fieldId"`
-	Type      *string `json:"type"`
-	CreatedBy string  `json:"createdBy"`
+	Namespace   string  `json:"namespace"`
+	FieldID     string  `json:"fieldId"`
+	Type        *string `json:"type"`
+	Description *string `json:"description"`
+	CreatedBy   string  `json:"createdBy"`
 }
 
 func (q *Queries) CreateField(ctx context.Context, arg CreateFieldParams) error {
@@ -41,6 +42,7 @@ func (q *Queries) CreateField(ctx context.Context, arg CreateFieldParams) error 
 		arg.Namespace,
 		arg.FieldID,
 		arg.Type,
+		arg.Description,
 		arg.CreatedBy,
 	)
 	return err
@@ -81,7 +83,7 @@ func (q *Queries) FieldExists(ctx context.Context, arg FieldExistsParams) (bool,
 }
 
 const GetField = `-- name: GetField :one
-SELECT namespace, field_id, type, created_at, created_by
+SELECT namespace, field_id, type, description, created_at, created_by
 FROM fields
 WHERE namespace = $1 AND field_id = $2
 `
@@ -92,11 +94,12 @@ type GetFieldParams struct {
 }
 
 type GetFieldRow struct {
-	Namespace string             `json:"namespace"`
-	FieldID   string             `json:"fieldId"`
-	Type      *string            `json:"type"`
-	CreatedAt pgtype.Timestamptz `json:"createdAt"`
-	CreatedBy string             `json:"createdBy"`
+	Namespace   string             `json:"namespace"`
+	FieldID     string             `json:"fieldId"`
+	Type        *string            `json:"type"`
+	Description *string            `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"createdAt"`
+	CreatedBy   string             `json:"createdBy"`
 }
 
 func (q *Queries) GetField(ctx context.Context, arg GetFieldParams) (*GetFieldRow, error) {
@@ -106,6 +109,7 @@ func (q *Queries) GetField(ctx context.Context, arg GetFieldParams) (*GetFieldRo
 		&i.Namespace,
 		&i.FieldID,
 		&i.Type,
+		&i.Description,
 		&i.CreatedAt,
 		&i.CreatedBy,
 	)
@@ -113,18 +117,19 @@ func (q *Queries) GetField(ctx context.Context, arg GetFieldParams) (*GetFieldRo
 }
 
 const ListFields = `-- name: ListFields :many
-SELECT namespace, field_id, type, created_at, created_by
+SELECT namespace, field_id, type, description, created_at, created_by
 FROM fields
 WHERE namespace = $1
 ORDER BY field_id ASC
 `
 
 type ListFieldsRow struct {
-	Namespace string             `json:"namespace"`
-	FieldID   string             `json:"fieldId"`
-	Type      *string            `json:"type"`
-	CreatedAt pgtype.Timestamptz `json:"createdAt"`
-	CreatedBy string             `json:"createdBy"`
+	Namespace   string             `json:"namespace"`
+	FieldID     string             `json:"fieldId"`
+	Type        *string            `json:"type"`
+	Description *string            `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"createdAt"`
+	CreatedBy   string             `json:"createdBy"`
 }
 
 func (q *Queries) ListFields(ctx context.Context, namespace string) ([]*ListFieldsRow, error) {
@@ -140,6 +145,7 @@ func (q *Queries) ListFields(ctx context.Context, namespace string) ([]*ListFiel
 			&i.Namespace,
 			&i.FieldID,
 			&i.Type,
+			&i.Description,
 			&i.CreatedAt,
 			&i.CreatedBy,
 		); err != nil {
@@ -155,15 +161,16 @@ func (q *Queries) ListFields(ctx context.Context, namespace string) ([]*ListFiel
 
 const UpdateField = `-- name: UpdateField :exec
 UPDATE fields
-SET type = $3, created_by = $4
+SET type = $3, description = $4, created_by = $5
 WHERE namespace = $1 AND field_id = $2
 `
 
 type UpdateFieldParams struct {
-	Namespace string  `json:"namespace"`
-	FieldID   string  `json:"fieldId"`
-	Type      *string `json:"type"`
-	CreatedBy string  `json:"createdBy"`
+	Namespace   string  `json:"namespace"`
+	FieldID     string  `json:"fieldId"`
+	Type        *string `json:"type"`
+	Description *string `json:"description"`
+	CreatedBy   string  `json:"createdBy"`
 }
 
 func (q *Queries) UpdateField(ctx context.Context, arg UpdateFieldParams) error {
@@ -171,6 +178,7 @@ func (q *Queries) UpdateField(ctx context.Context, arg UpdateFieldParams) error 
 		arg.Namespace,
 		arg.FieldID,
 		arg.Type,
+		arg.Description,
 		arg.CreatedBy,
 	)
 	return err

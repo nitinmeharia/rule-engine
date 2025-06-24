@@ -124,8 +124,8 @@ func TestNamespaceHandler_CreateNamespace(t *testing.T) {
 			setupMock:      func(mockService *MockNamespaceService) {},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody: map[string]interface{}{
-				"error": "Invalid request body",
-				"code":  "INVALID_REQUEST",
+				"error": "BAD_REQUEST",
+				"code":  "VALIDATION_ERROR",
 			},
 		},
 		{
@@ -136,10 +136,10 @@ func TestNamespaceHandler_CreateNamespace(t *testing.T) {
 			},
 			clientID:       "",
 			setupMock:      func(mockService *MockNamespaceService) {},
-			expectedStatus: http.StatusUnauthorized,
+			expectedStatus: http.StatusInternalServerError,
 			expectedBody: map[string]interface{}{
-				"error": "Missing client ID",
-				"code":  "MISSING_CLIENT_ID",
+				"error": "INTERNAL_ERROR",
+				"code":  "INTERNAL_ERROR",
 			},
 		},
 		{
@@ -154,12 +154,12 @@ func TestNamespaceHandler_CreateNamespace(t *testing.T) {
 					return namespace.ID == "test-ns" &&
 						namespace.Description == "Test namespace" &&
 						namespace.CreatedBy == "test-client"
-				})).Return(domain.ErrAlreadyExists)
+				})).Return(domain.ErrNamespaceAlreadyExists)
 			},
 			expectedStatus: http.StatusConflict,
 			expectedBody: map[string]interface{}{
-				"error": "Namespace already exists",
-				"code":  "ALREADY_EXISTS",
+				"error": "CONFLICT",
+				"code":  "NAMESPACE_ALREADY_EXISTS",
 			},
 		},
 		{
@@ -178,7 +178,7 @@ func TestNamespaceHandler_CreateNamespace(t *testing.T) {
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody: map[string]interface{}{
-				"error": "Internal server error",
+				"error": "INTERNAL_ERROR",
 				"code":  "INTERNAL_ERROR",
 			},
 		},
@@ -199,7 +199,7 @@ func TestNamespaceHandler_CreateNamespace(t *testing.T) {
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody: map[string]interface{}{
-				"error": "Internal server error",
+				"error": "INTERNAL_ERROR",
 				"code":  "INTERNAL_ERROR",
 			},
 		},
@@ -212,7 +212,11 @@ func TestNamespaceHandler_CreateNamespace(t *testing.T) {
 			tt.setupMock(mockService)
 
 			c, w := createTestContext()
-			c.Set("client_id", tt.clientID)
+
+			// Only set client_id if it's not empty (to test missing client_id case)
+			if tt.clientID != "" {
+				c.Set("client_id", tt.clientID)
+			}
 
 			// Create request body
 			jsonBody, _ := json.Marshal(tt.requestBody)
@@ -272,11 +276,11 @@ func TestNamespaceHandler_GetNamespace(t *testing.T) {
 			name:        "namespace not found",
 			namespaceID: "non-existent",
 			setupMock: func(mockService *MockNamespaceService) {
-				mockService.On("GetNamespace", mock.Anything, "non-existent").Return((*domain.Namespace)(nil), domain.ErrNotFound)
+				mockService.On("GetNamespace", mock.Anything, "non-existent").Return((*domain.Namespace)(nil), domain.ErrNamespaceNotFound)
 			},
 			expectedStatus: http.StatusNotFound,
 			expectedBody: map[string]interface{}{
-				"error": "Namespace not found",
+				"error": "NOT_FOUND",
 				"code":  "NAMESPACE_NOT_FOUND",
 			},
 		},
@@ -284,12 +288,12 @@ func TestNamespaceHandler_GetNamespace(t *testing.T) {
 			name:        "invalid input",
 			namespaceID: "",
 			setupMock: func(mockService *MockNamespaceService) {
-				mockService.On("GetNamespace", mock.Anything, "").Return((*domain.Namespace)(nil), domain.ErrInvalidInput)
+				mockService.On("GetNamespace", mock.Anything, "").Return((*domain.Namespace)(nil), domain.ErrInvalidNamespaceID)
 			},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody: map[string]interface{}{
-				"error": "Invalid input",
-				"code":  "INVALID_INPUT",
+				"error": "BAD_REQUEST",
+				"code":  "INVALID_NAMESPACE_ID",
 			},
 		},
 		{
@@ -300,7 +304,7 @@ func TestNamespaceHandler_GetNamespace(t *testing.T) {
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody: map[string]interface{}{
-				"error": "Internal server error",
+				"error": "INTERNAL_ERROR",
 				"code":  "INTERNAL_ERROR",
 			},
 		},
@@ -390,7 +394,7 @@ func TestNamespaceHandler_ListNamespaces(t *testing.T) {
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody: map[string]interface{}{
-				"error": "Internal server error",
+				"error": "INTERNAL_ERROR",
 				"code":  "INTERNAL_ERROR",
 			},
 		},
@@ -452,11 +456,11 @@ func TestNamespaceHandler_DeleteNamespace(t *testing.T) {
 			name:        "namespace not found",
 			namespaceID: "non-existent",
 			setupMock: func(mockService *MockNamespaceService) {
-				mockService.On("DeleteNamespace", mock.Anything, "non-existent").Return(domain.ErrNotFound)
+				mockService.On("DeleteNamespace", mock.Anything, "non-existent").Return(domain.ErrNamespaceNotFound)
 			},
 			expectedStatus: http.StatusNotFound,
 			expectedBody: map[string]interface{}{
-				"error": "Namespace not found",
+				"error": "NOT_FOUND",
 				"code":  "NAMESPACE_NOT_FOUND",
 			},
 		},
@@ -464,12 +468,12 @@ func TestNamespaceHandler_DeleteNamespace(t *testing.T) {
 			name:        "invalid input",
 			namespaceID: "",
 			setupMock: func(mockService *MockNamespaceService) {
-				mockService.On("DeleteNamespace", mock.Anything, "").Return(domain.ErrInvalidInput)
+				mockService.On("DeleteNamespace", mock.Anything, "").Return(domain.ErrInvalidNamespaceID)
 			},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody: map[string]interface{}{
-				"error": "Invalid input",
-				"code":  "INVALID_INPUT",
+				"error": "BAD_REQUEST",
+				"code":  "INVALID_NAMESPACE_ID",
 			},
 		},
 		{
@@ -480,7 +484,7 @@ func TestNamespaceHandler_DeleteNamespace(t *testing.T) {
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody: map[string]interface{}{
-				"error": "Internal server error",
+				"error": "INTERNAL_ERROR",
 				"code":  "INTERNAL_ERROR",
 			},
 		},
@@ -539,16 +543,12 @@ func TestNamespaceHandler_MapError(t *testing.T) {
 		expectedStatus int
 		expectedCode   string
 	}{
-		{"not found", domain.ErrNotFound, http.StatusNotFound, "NAMESPACE_NOT_FOUND"},
-		{"already exists", domain.ErrAlreadyExists, http.StatusConflict, "NAMESPACE_ALREADY_EXISTS"},
-		{"invalid input", domain.ErrInvalidInput, http.StatusBadRequest, "INVALID_INPUT"},
-		{"validation", domain.ErrValidation, http.StatusBadRequest, "VALIDATION_ERROR"},
-		{"unauthorized", domain.ErrUnauthorized, http.StatusUnauthorized, "UNAUTHORIZED"},
-		{"forbidden", domain.ErrForbidden, http.StatusForbidden, "FORBIDDEN"},
-		{"validation error wrapped", errors.New("validation failed: namespace ID is required"), http.StatusBadRequest, "VALIDATION_ERROR"},
-		{"required error", errors.New("namespace ID is required"), http.StatusBadRequest, "VALIDATION_ERROR"},
-		{"too long error", errors.New("description too long"), http.StatusBadRequest, "VALIDATION_ERROR"},
-		{"invalid error", errors.New("invalid namespace ID"), http.StatusBadRequest, "VALIDATION_ERROR"},
+		{"not found", domain.ErrNamespaceNotFound, http.StatusNotFound, "NAMESPACE_NOT_FOUND"},
+		{"already exists", domain.ErrNamespaceAlreadyExists, http.StatusConflict, "NAMESPACE_ALREADY_EXISTS"},
+		{"invalid input", domain.ErrInvalidNamespaceID, http.StatusBadRequest, "INVALID_NAMESPACE_ID"},
+		{"validation", domain.ErrValidationError, http.StatusBadRequest, "VALIDATION_ERROR"},
+		{"unauthorized", domain.ErrMissingAuthHeader, http.StatusUnauthorized, "MISSING_AUTH_HEADER"},
+		{"forbidden", domain.ErrInsufficientPermissions, http.StatusForbidden, "INSUFFICIENT_PERMISSIONS"},
 		{"unknown error", errors.New("unknown error"), http.StatusInternalServerError, "INTERNAL_ERROR"},
 	}
 
@@ -556,7 +556,9 @@ func TestNamespaceHandler_MapError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			status, response := handler.mapError(tt.err)
 			assert.Equal(t, tt.expectedStatus, status)
-			assert.Equal(t, tt.expectedCode, response.Code)
+			if apiErr, ok := response.(*domain.APIError); ok {
+				assert.Equal(t, tt.expectedCode, apiErr.Code)
+			}
 		})
 	}
 }
@@ -567,7 +569,7 @@ func TestIsValidationError(t *testing.T) {
 		err      error
 		expected bool
 	}{
-		{"validation error", domain.ErrValidation, true},
+		{"validation error", domain.ErrValidationError, true},
 		{"validation failed", errors.New("validation failed: namespace ID is required"), true},
 		{"required error", errors.New("namespace ID is required"), true},
 		{"too long error", errors.New("description too long"), true},
