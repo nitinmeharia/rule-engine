@@ -27,12 +27,13 @@ const (
 	ErrCodeInvalidFunctionArgs   = "INVALID_FUNCTION_ARGS"
 
 	// Rule errors
-	ErrCodeRuleAlreadyExists  = "RULE_ALREADY_EXISTS"
-	ErrCodeRuleNotFound       = "RULE_NOT_FOUND"
-	ErrCodeInvalidRuleID      = "INVALID_RULE_ID"
-	ErrCodeInvalidRuleLogic   = "INVALID_RULE_LOGIC"
-	ErrCodeDraftExists        = "DRAFT_EXISTS"
-	ErrCodeDependencyInactive = "PUBLISH_DEPENDENCY_INACTIVE"
+	ErrCodeRuleAlreadyExists     = "RULE_ALREADY_EXISTS"
+	ErrCodeRuleNotFound          = "RULE_NOT_FOUND"
+	ErrCodeInvalidRuleID         = "INVALID_RULE_ID"
+	ErrCodeInvalidRuleLogic      = "INVALID_RULE_LOGIC"
+	ErrCodeInvalidRuleConditions = "INVALID_RULE_CONDITIONS"
+	ErrCodeDraftExists           = "DRAFT_EXISTS"
+	ErrCodeDependencyInactive    = "PUBLISH_DEPENDENCY_INACTIVE"
 
 	// Workflow errors
 	ErrCodeWorkflowAlreadyExists   = "WORKFLOW_ALREADY_EXISTS"
@@ -89,7 +90,7 @@ func (e *APIError) HTTPStatus() int {
 	case ErrCodeInvalidNamespaceID, ErrCodeInvalidFieldID, ErrCodeInvalidFunctionID,
 		ErrCodeInvalidRuleID, ErrCodeInvalidWorkflowID, ErrCodeInvalidTerminalID,
 		ErrCodeInvalidFieldType, ErrCodeInvalidFunctionType, ErrCodeInvalidRuleLogic,
-		ErrCodeInvalidDescription, ErrCodeInvalidFunctionArgs, ErrCodeValidationError,
+		ErrCodeInvalidRuleConditions, ErrCodeInvalidDescription, ErrCodeInvalidFunctionArgs, ErrCodeValidationError,
 		ErrCodeInvalidWorkflowStartAt, ErrCodeInvalidChecksum, ErrCodeInvalidExecutionRequest,
 		ErrCodeInvalidExecutionData:
 		return http.StatusBadRequest
@@ -141,7 +142,7 @@ func getErrorType(code string) string {
 	case ErrCodeInvalidNamespaceID, ErrCodeInvalidFieldID, ErrCodeInvalidFunctionID,
 		ErrCodeInvalidRuleID, ErrCodeInvalidWorkflowID, ErrCodeInvalidTerminalID,
 		ErrCodeInvalidFieldType, ErrCodeInvalidFunctionType, ErrCodeInvalidRuleLogic,
-		ErrCodeInvalidDescription, ErrCodeInvalidFunctionArgs, ErrCodeValidationError,
+		ErrCodeInvalidRuleConditions, ErrCodeInvalidDescription, ErrCodeInvalidFunctionArgs, ErrCodeValidationError,
 		ErrCodeInvalidWorkflowStartAt, ErrCodeInvalidChecksum, ErrCodeInvalidExecutionRequest,
 		ErrCodeInvalidExecutionData:
 		return "BAD_REQUEST"
@@ -168,12 +169,13 @@ var (
 	ErrInvalidFunctionType   = NewAPIError(ErrCodeInvalidFunctionType, "Invalid function type")
 	ErrInvalidFunctionArgs   = NewAPIError(ErrCodeInvalidFunctionArgs, "Invalid function arguments")
 
-	ErrRuleAlreadyExists  = NewAPIError(ErrCodeRuleAlreadyExists, "Rule already exists")
-	ErrRuleNotFound       = NewAPIError(ErrCodeRuleNotFound, "Rule not found")
-	ErrInvalidRuleID      = NewAPIError(ErrCodeInvalidRuleID, "Rule ID is required")
-	ErrInvalidRuleLogic   = NewAPIError(ErrCodeInvalidRuleLogic, "Invalid rule logic")
-	ErrDraftExists        = NewAPIError(ErrCodeDraftExists, "Draft already exists")
-	ErrDependencyInactive = NewAPIError(ErrCodeDependencyInactive, "Dependent rule/function not active")
+	ErrRuleAlreadyExists     = NewAPIError(ErrCodeRuleAlreadyExists, "Rule already exists")
+	ErrRuleNotFound          = NewAPIError(ErrCodeRuleNotFound, "Rule not found")
+	ErrInvalidRuleID         = NewAPIError(ErrCodeInvalidRuleID, "Rule ID is required")
+	ErrInvalidRuleLogic      = NewAPIError(ErrCodeInvalidRuleLogic, "Invalid rule logic")
+	ErrInvalidRuleConditions = NewAPIError(ErrCodeInvalidRuleConditions, "Invalid rule conditions")
+	ErrDraftExists           = NewAPIError(ErrCodeDraftExists, "Draft already exists")
+	ErrDependencyInactive    = NewAPIError(ErrCodeDependencyInactive, "Dependent rule/function not active")
 
 	ErrWorkflowAlreadyExists   = NewAPIError(ErrCodeWorkflowAlreadyExists, "Workflow already exists")
 	ErrWorkflowNotFound        = NewAPIError(ErrCodeWorkflowNotFound, "Workflow not found")

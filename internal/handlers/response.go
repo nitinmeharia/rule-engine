@@ -202,3 +202,36 @@ func (h *ResponseHandler) ConvertFunctionsToResponse(functions []*domain.Functio
 	}
 	return response
 }
+
+// ConvertRuleToResponse converts a domain Rule to RuleResponse
+func (h *ResponseHandler) ConvertRuleToResponse(rule *domain.Rule) domain.RuleResponse {
+	return domain.RuleResponse{
+		ID:          rule.RuleID,
+		Version:     rule.Version,
+		Status:      rule.Status,
+		Logic:       rule.Logic,
+		Conditions:  rule.Conditions,
+		CreatedAt:   rule.CreatedAt,
+		CreatedBy:   rule.CreatedBy,
+		PublishedAt: rule.PublishedAt,
+		PublishedBy: rule.PublishedBy,
+	}
+}
+
+// ConvertRulesToResponse converts a slice of domain Rules to RuleResponse slice
+func (h *ResponseHandler) ConvertRulesToResponse(rules []*domain.Rule) []domain.RuleResponse {
+	var response []domain.RuleResponse
+	for _, rule := range rules {
+		response = append(response, h.ConvertRuleToResponse(rule))
+	}
+	return response
+}
+
+// ConvertRuleVersionsToResponse converts a slice of domain Rules to RuleResponse slice for version history
+func (h *ResponseHandler) ConvertRuleVersionsToResponse(rules []*domain.Rule) []domain.RuleResponse {
+	var response []domain.RuleResponse
+	for _, rule := range rules {
+		response = append(response, h.ConvertRuleToResponse(rule))
+	}
+	return response
+}
