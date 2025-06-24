@@ -1,0 +1,212 @@
+package handlers
+
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/rule-engine/internal/domain"
+	"github.com/rule-engine/internal/service"
+)
+
+// FunctionHandler handles HTTP requests for functions
+type FunctionHandler struct {
+	functionService service.FunctionServiceInterface
+	responseHandler *ResponseHandler
+}
+
+// NewFunctionHandler creates a new function handler
+func NewFunctionHandler(functionService service.FunctionServiceInterface) *FunctionHandler {
+	return &FunctionHandler{
+		functionService: functionService,
+		responseHandler: NewResponseHandler(),
+	}
+}
+
+// CreateFunction handles POST /v1/namespaces/{namespace}/functions
+func (h *FunctionHandler) CreateFunction(c *gin.Context) {
+	namespace := c.Param("id")
+	if namespace == "" {
+		h.responseHandler.BadRequest(c, "Namespace is required")
+		return
+	}
+
+	var req domain.CreateFunctionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.responseHandler.BadRequest(c, "Invalid request body")
+		return
+	}
+
+	// Get client ID from context
+	clientID, exists := c.Get("client_id")
+	if !exists || clientID == nil {
+		h.responseHandler.Unauthorized(c, "Client ID not found")
+		return
+	}
+
+	function := &domain.Function{
+		FunctionID: req.ID,
+		Type:       req.Type,
+		Args:       req.Args,
+		Values:     req.Values,
+		CreatedBy:  clientID.(string),
+	}
+
+	err := h.functionService.CreateFunction(c.Request.Context(), namespace, function)
+	if err != nil {
+		h.responseHandler.MapDomainErrorToResponse(c, err)
+		return
+	}
+
+	response := domain.CreateFunctionResponse{
+		Status:   "draft",
+		Function: h.responseHandler.ConvertFunctionToResponse(function),
+	}
+	c.JSON(http.StatusCreated, response)
+}
+
+// GetFunction handles GET /v1/namespaces/{namespace}/functions/{functionId}
+func (h *FunctionHandler) GetFunction(c *gin.Context) {
+	namespace := c.Param("id")
+	functionID := c.Param("functionId")
+
+	if namespace == "" || functionID == "" {
+		h.responseHandler.BadRequest(c, "Namespace and function ID are required")
+		return
+	}
+
+	function, err := h.functionService.GetFunction(c.Request.Context(), namespace, functionID)
+	if err != nil {
+		h.responseHandler.MapDomainErrorToResponse(c, err)
+		return
+	}
+
+	response := h.responseHandler.ConvertFunctionToResponse(function)
+	h.responseHandler.OK(c, response)
+}
+
+// ListFunctions handles GET /v1/namespaces/{namespace}/functions
+func (h *FunctionHandler) ListFunctions(c *gin.Context) {
+	namespace := c.Param("id")
+	if namespace == "" {
+		h.responseHandler.BadRequest(c, "Namespace is required")
+		return
+	}
+
+	functions, err := h.functionService.ListFunctions(c.Request.Context(), namespace)
+	if err != nil {
+		h.responseHandler.MapDomainErrorToResponse(c, err)
+		return
+	}
+
+	response := h.responseHandler.ConvertFunctionsToResponse(functions)
+	h.responseHandler.OK(c, response)
+}
+
+// UpdateFunction handles PUT /v1/namespaces/{namespace}/functions/{functionId}/versions/draft
+func (h *FunctionHandler) UpdateFunction(c *gin.Context) {
+	namespace := c.Param("id")
+	functionID := c.Param("functionId")
+
+	if namespace == "" || functionID == "" {
+		h.responseHandler.BadRequest(c, "Namespace and function ID are required")
+		return
+	}
+
+	var req domain.UpdateFunctionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.responseHandler.BadRequest(c, "Invalid request body")
+		return
+	}
+
+	// Get client ID from context
+	clientID, exists := c.Get("client_id")
+	if !exists || clientID == nil {
+		h.responseHandler.Unauthorized(c, "Client ID not found")
+		return
+	}
+
+	function := &domain.Function{
+		Type:      req.Type,
+		Args:      req.Args,
+		Values:    req.Values,
+		CreatedBy: clientID.(string),
+	}
+
+	err := h.functionService.UpdateFunction(c.Request.Context(), namespace, functionID, function)
+	if err != nil {
+		h.responseHandler.MapDomainErrorToResponse(c, err)
+		return
+	}
+
+	// Get the updated function to return in response
+	updatedFunction, err := h.functionService.GetFunction(c.Request.Context(), namespace, functionID)
+	if err != nil {
+		h.responseHandler.MapDomainErrorToResponse(c, err)
+		return
+	}
+
+	response := domain.UpdateFunctionResponse{
+		Function: h.responseHandler.ConvertFunctionToResponse(updatedFunction),
+	}
+	c.JSON(http.StatusOK, response)
+}
+
+// PublishFunction handles POST /v1/namespaces/{namespace}/functions/{functionId}/publish
+func (h *FunctionHandler) PublishFunction(c *gin.Context) {
+	namespace := c.Param("id")
+	functionID := c.Param("functionId")
+
+	if namespace == "" || functionID == "" {
+		h.responseHandler.BadRequest(c, "Namespace and function ID are required")
+		return
+	}
+
+	// Get client ID from context
+	clientID, exists := c.Get("client_id")
+	if !exists || clientID == nil {
+		h.responseHandler.Unauthorized(c, "Client ID not found")
+		return
+	}
+
+	err := h.functionService.PublishFunction(c.Request.Context(), namespace, functionID, clientID.(string))
+	if err != nil {
+		h.responseHandler.MapDomainErrorToResponse(c, err)
+		return
+	}
+
+	// Get the published function to return in response
+	function, err := h.functionService.GetFunction(c.Request.Context(), namespace, functionID)
+	if err != nil {
+		h.responseHandler.MapDomainErrorToResponse(c, err)
+		return
+	}
+
+	response := h.responseHandler.ConvertFunctionToResponse(function)
+	h.responseHandler.OK(c, response)
+}
+
+// DeleteFunction handles DELETE /v1/namespaces/{namespace}/functions/{functionId}/versions/{version}
+func (h *FunctionHandler) DeleteFunction(c *gin.Context) {
+	namespace := c.Param("id")
+	functionID := c.Param("functionId")
+	versionStr := c.Param("version")
+
+	if namespace == "" || functionID == "" || versionStr == "" {
+		h.responseHandler.BadRequest(c, "Namespace, function ID, and version are required")
+		return
+	}
+
+	// Parse version
+	var version int32
+	if _, err := fmt.Sscanf(versionStr, "%d", &version); err != nil {
+		h.responseHandler.BadRequest(c, "Invalid version format")
+		return
+	}
+
+	// Attempt to delete the function
+	// Always return 204 No Content regardless of whether the function exists
+	_ = h.functionService.DeleteFunction(c.Request.Context(), namespace, functionID, version)
+
+	c.Status(http.StatusNoContent)
+}
