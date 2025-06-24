@@ -435,6 +435,25 @@ test_rules_api() {
     # Test rule validation (should fail as endpoint not implemented)
     make_request "POST" "/v1/namespaces/rules-test-ns/rules/basic_approval/validate" "$admin_token" "" "404" "Validate published rule (endpoint not implemented)"
 
+    # CRITICAL TEST: Verify publish-time dependency validation
+    # Create a draft function (not published)
+    local draft_function='{"id": "draft_function", "type": "max", "args": ["income"]}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/functions" "$admin_token" "$draft_function" "201" "Create draft function for dependency test"
+    
+    # Create a rule that references the draft function
+    local invalid_dependency_rule='{"id": "invalid_dependency_rule", "logic": "AND", "conditions": [{"type": "function", "functionId": "draft_function", "operator": ">=", "value": 50000}]}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" "$invalid_dependency_rule" "201" "Create rule with draft function dependency"
+    
+    # Attempt to publish rule with inactive function dependency (should be rejected)
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/invalid_dependency_rule/publish" "$admin_token" "" "404" "Publish rule with inactive function dependency (should be rejected)"
+    
+    # Create a rule that references a non-existent function
+    local non_existent_dependency_rule='{"id": "non_existent_dependency_rule", "logic": "AND", "conditions": [{"type": "function", "functionId": "completely_missing_function", "operator": ">=", "value": 50000}]}'
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules" "$admin_token" "$non_existent_dependency_rule" "201" "Create rule with non-existent function dependency"
+    
+    # Attempt to publish rule with non-existent function dependency (should be rejected)
+    make_request "POST" "/v1/namespaces/rules-test-ns/rules/non_existent_dependency_rule/publish" "$admin_token" "" "404" "Publish rule with non-existent function dependency (should be rejected)"
+
     # Test rule execution (should fail as endpoint not implemented)
     local test_data='{"age": 30, "income": 75000, "credit_score": 750, "employment_status": "full_time", "loan_amount": 25000}'
     make_request "POST" "/v1/namespaces/rules-test-ns/rules/basic_approval/execute" "$executor_token" "$test_data" "404" "Execute basic rule (endpoint not implemented)"

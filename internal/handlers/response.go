@@ -118,6 +118,8 @@ func (h *ResponseHandler) MapDomainErrorToResponse(c *gin.Context, err error) {
 		h.BadRequest(c, "Invalid function type")
 	case domain.ErrInvalidFunctionArgs:
 		h.BadRequest(c, "Invalid function arguments")
+	case domain.ErrFunctionNotActive:
+		h.BadRequest(c, "Function not active")
 	case domain.ErrRuleAlreadyExists:
 		h.Conflict(c, "Rule already exists")
 	case domain.ErrRuleNotFound:
@@ -126,6 +128,10 @@ func (h *ResponseHandler) MapDomainErrorToResponse(c *gin.Context, err error) {
 		h.BadRequest(c, "Invalid rule ID")
 	case domain.ErrInvalidRuleLogic:
 		h.BadRequest(c, "Invalid rule logic")
+	case domain.ErrInvalidRuleConditions:
+		h.BadRequest(c, "Invalid rule conditions")
+	case domain.ErrRuleNotActive:
+		h.BadRequest(c, "Rule not active")
 	case domain.ErrWorkflowAlreadyExists:
 		h.Conflict(c, "Workflow already exists")
 	case domain.ErrWorkflowNotFound:

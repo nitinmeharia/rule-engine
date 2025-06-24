@@ -11,12 +11,18 @@ import (
 
 // RuleService handles business logic for rules
 type RuleService struct {
-	repo domain.RuleRepository
+	repo         domain.RuleRepository
+	functionRepo domain.FunctionRepository
+	fieldRepo    domain.FieldRepository
 }
 
 // NewRuleService creates a new rule service
-func NewRuleService(repo domain.RuleRepository) *RuleService {
-	return &RuleService{repo: repo}
+func NewRuleService(repo domain.RuleRepository, functionRepo domain.FunctionRepository, fieldRepo domain.FieldRepository) *RuleService {
+	return &RuleService{
+		repo:         repo,
+		functionRepo: functionRepo,
+		fieldRepo:    fieldRepo,
+	}
 }
 
 // CreateRule creates a new rule
@@ -167,11 +173,10 @@ func (s *RuleService) PublishRule(ctx context.Context, namespace, ruleID, publis
 		return err
 	}
 
-	// TODO: Add dependency validation here
-	// - Check that all referenced fields exist
-	// - Check that all referenced functions are active
-	// - Check that all referenced rules are active
-	// - Check for circular dependencies
+	// CRITICAL: Validate dependencies before publishing
+	if err := s.validateDependencies(ctx, namespace, draftRule.Conditions); err != nil {
+		return err
+	}
 
 	// Publish the rule
 	return s.repo.Publish(ctx, namespace, ruleID, draftRule.Version, publishedBy)
@@ -302,6 +307,114 @@ func (s *RuleService) validateRuleCondition(condition map[string]interface{}) er
 	// Required fields: ruleId
 	if _, ok := condition["ruleId"].(string); !ok {
 		return domain.ErrInvalidRuleConditions
+	}
+
+	return nil
+}
+
+// validateDependencies validates the dependencies of a rule
+func (s *RuleService) validateDependencies(ctx context.Context, namespace string, conditions json.RawMessage) error {
+	// Parse conditions to extract dependencies
+	var conditionsArray []map[string]interface{}
+	if err := json.Unmarshal(conditions, &conditionsArray); err != nil {
+		return domain.ErrInvalidRuleConditions
+	}
+
+	// Validate each condition's dependencies
+	for _, condition := range conditionsArray {
+		conditionType, ok := condition["type"].(string)
+		if !ok {
+			return domain.ErrInvalidRuleConditions
+		}
+
+		switch conditionType {
+		case "function":
+			if err := s.validateFunctionDependency(ctx, namespace, condition); err != nil {
+				return err
+			}
+		case "field":
+			if err := s.validateFieldDependency(ctx, namespace, condition); err != nil {
+				return err
+			}
+		case "rule":
+			if err := s.validateRuleDependency(ctx, namespace, condition); err != nil {
+				return err
+			}
+		default:
+			return domain.ErrInvalidRuleConditions
+		}
+	}
+
+	return nil
+}
+
+// validateFunctionDependency validates that a referenced function exists and is active
+func (s *RuleService) validateFunctionDependency(ctx context.Context, namespace string, condition map[string]interface{}) error {
+	functionID, ok := condition["functionId"].(string)
+	if !ok {
+		return domain.ErrInvalidRuleConditions
+	}
+
+	// Check if function exists and is active
+	function, err := s.functionRepo.GetActiveVersion(ctx, namespace, functionID)
+	if err != nil {
+		// Treat any error as not found for dependency validation
+		return domain.ErrFunctionNotFound
+	}
+
+	// If function is found but not active, return error
+	if function.Status != domain.StatusActive {
+		return domain.ErrFunctionNotActive
+	}
+
+	return nil
+}
+
+// validateFieldDependency validates that a referenced field exists
+func (s *RuleService) validateFieldDependency(ctx context.Context, namespace string, condition map[string]interface{}) error {
+	fieldID, ok := condition["fieldId"].(string)
+	if !ok {
+		return domain.ErrInvalidRuleConditions
+	}
+
+	// Check if field exists
+	field, err := s.fieldRepo.GetByID(ctx, namespace, fieldID)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows in result set") {
+			return domain.ErrFieldNotFound
+		}
+		return domain.ErrInternalError
+	}
+
+	if field == nil {
+		return domain.ErrFieldNotFound
+	}
+
+	return nil
+}
+
+// validateRuleDependency validates that a referenced rule exists and is active
+func (s *RuleService) validateRuleDependency(ctx context.Context, namespace string, condition map[string]interface{}) error {
+	ruleID, ok := condition["ruleId"].(string)
+	if !ok {
+		return domain.ErrInvalidRuleConditions
+	}
+
+	// Check if rule exists and is active
+	rule, err := s.repo.GetActiveVersion(ctx, namespace, ruleID)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows in result set") {
+			return domain.ErrRuleNotFound
+		}
+		return domain.ErrInternalError
+	}
+
+	if rule == nil {
+		return domain.ErrRuleNotFound
+	}
+
+	if rule.Status != domain.StatusActive {
+		return domain.ErrRuleNotActive
 	}
 
 	return nil

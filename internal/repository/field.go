@@ -39,7 +39,7 @@ func (r *FieldRepository) Create(ctx context.Context, field *domain.Field) error
 	return nil
 }
 
-func (r *FieldRepository) Get(ctx context.Context, namespace, fieldID string) (*domain.Field, error) {
+func (r *FieldRepository) GetByID(ctx context.Context, namespace, fieldID string) (*domain.Field, error) {
 	f, err := r.db.GetField(ctx, db.GetFieldParams{
 		Namespace: namespace,
 		FieldID:   fieldID,
@@ -55,6 +55,11 @@ func (r *FieldRepository) Get(ctx context.Context, namespace, fieldID string) (*
 		CreatedAt:   f.CreatedAt.Time,
 		CreatedBy:   f.CreatedBy,
 	}, nil
+}
+
+// Get is an alias for GetByID for backward compatibility
+func (r *FieldRepository) Get(ctx context.Context, namespace, fieldID string) (*domain.Field, error) {
+	return r.GetByID(ctx, namespace, fieldID)
 }
 
 func (r *FieldRepository) List(ctx context.Context, namespace string) ([]*domain.Field, error) {
@@ -99,6 +104,11 @@ func (r *FieldRepository) Exists(ctx context.Context, namespace, fieldID string)
 		FieldID:   fieldID,
 	})
 	return exists, err
+}
+
+func (r *FieldRepository) CountByNamespace(ctx context.Context, namespace string) (int64, error) {
+	count, err := r.db.CountFieldsByNamespace(ctx, namespace)
+	return count, err
 }
 
 func (r *FieldRepository) NamespaceExists(ctx context.Context, namespace string) (bool, error) {

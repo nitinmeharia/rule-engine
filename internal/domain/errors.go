@@ -68,6 +68,10 @@ const (
 	// Execution errors
 	ErrCodeInvalidExecutionRequest = "INVALID_EXECUTION_REQUEST"
 	ErrCodeInvalidExecutionData    = "INVALID_EXECUTION_DATA"
+
+	// New errors
+	ErrCodeFunctionNotActive = "FUNCTION_NOT_ACTIVE"
+	ErrCodeRuleNotActive     = "RULE_NOT_ACTIVE"
 )
 
 // APIError represents a standardized API error response
@@ -200,4 +204,7 @@ var (
 
 	ErrInvalidExecutionRequest = NewAPIError(ErrCodeInvalidExecutionRequest, "Invalid execution request")
 	ErrInvalidExecutionData    = NewAPIError(ErrCodeInvalidExecutionData, "Invalid execution data")
+
+	ErrFunctionNotActive = NewAPIError(ErrCodeFunctionNotActive, "Function not active")
+	ErrRuleNotActive     = NewAPIError(ErrCodeRuleNotActive, "Rule not active")
 )
