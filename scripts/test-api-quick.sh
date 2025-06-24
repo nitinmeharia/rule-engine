@@ -181,7 +181,7 @@ main() {
     echo ""
     
     # Clean up any existing test data
-    cleanup_test_data
+    bash ./scripts/cleanup-test-data.sh
     
     # Check if server is running
     if ! check_server; then

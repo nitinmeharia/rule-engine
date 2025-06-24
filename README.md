@@ -1,6 +1,6 @@
 # Generic Rule Engine
 
-A high-performance, scalable rule engine built in Go with comprehensive API support, JWT authentication, and PostgreSQL backend.
+A high-performance, scalable rule engine built in Go with comprehensive API support, JWT authentication, and PostgreSQL backend. Built following Clean Architecture principles with rich domain models and comprehensive testing.
 
 ## 🚀 Features
 
@@ -14,13 +14,28 @@ A high-performance, scalable rule engine built in Go with comprehensive API supp
 - **📁 Namespace Management**
   - Create, read, list, and delete namespaces
   - Hierarchical organization of rules and configurations
-  - Validation and error handling
+  - Rich domain model validation
+  - Comprehensive error handling
 
 - **🏷️ Fields API**
   - Create and list fields within namespaces
-  - Support for "number" and "string" field types
+  - Support for multiple field types (number, string, boolean, date)
   - Optional descriptions for fields
-  - Proper validation and error handling
+  - Domain-driven validation
+
+- **⚙️ Functions API**
+  - Create, read, update, and delete functions
+  - Support for multiple function types (max, sum, avg, in)
+  - Draft and published versions with lifecycle management
+  - Function validation and dependency checking
+  - Role-based access control
+
+- **🏗️ Clean Architecture**
+  - Proper separation of concerns
+  - Framework-agnostic business logic
+  - Rich domain models with encapsulated validation
+  - Dependency inversion with interfaces
+  - Testable and maintainable codebase
 
 - **🗄️ Database Integration**
   - PostgreSQL with sqlc for type-safe queries
@@ -31,16 +46,46 @@ A high-performance, scalable rule engine built in Go with comprehensive API supp
   - Standardized error contract across all APIs
   - Unique error codes for each operation
   - Proper HTTP status codes and error messages
+  - Centralized response handling
 
 - **📊 Logging & Monitoring**
   - Structured logging with zerolog
   - Request/response logging
   - Performance metrics and monitoring
 
-- **🧪 Testing**
-  - Comprehensive unit tests for all layers
-  - Mock-based testing for services and handlers
-  - Integration test support
+- **🧪 Comprehensive Testing**
+  - Unit tests for all layers (handlers, services, repositories)
+  - Integration tests with real database
+  - End-to-end API testing
+  - Mock-based testing for services
+  - Consolidated test scripts with shared cleanup
+
+## 🏗️ Architecture
+
+The project follows Clean Architecture principles with clear separation of concerns:
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Handlers      │    │    Services     │    │   Domain        │
+│   (HTTP Layer)  │───▶│   (Orchestration)│───▶│   (Business     │
+│                 │    │                 │    │    Logic)       │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   DTOs          │    │  Repositories   │    │   Models        │
+│   (Data Transfer)│    │   (Data Access) │    │   (Rich Domain) │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+### Key Architectural Features
+
+- **Framework Independence**: Business logic is completely decoupled from HTTP framework
+- **Rich Domain Models**: Validation logic encapsulated within domain entities
+- **Dependency Inversion**: Services depend on interfaces, not concrete implementations
+- **Testability**: Each layer can be tested independently
+- **Maintainability**: Clear separation of concerns and consistent patterns
 
 ## 📋 Prerequisites
 
@@ -257,6 +302,89 @@ Content-Type: application/json
 }
 ```
 
+### Functions API
+
+#### List Functions
+```http
+GET /v1/namespaces/{namespace-id}/functions
+Authorization: Bearer <token>
+```
+
+**Response:**
+```json
+[
+  {
+    "id": "max_income",
+    "version": 1,
+    "status": "active",
+    "type": "max",
+    "args": ["salary", "bonus"],
+    "values": null,
+    "returnType": "number",
+    "createdAt": "2025-06-24T09:58:29.146389+05:30",
+    "createdBy": "test-client",
+    "publishedAt": "2025-06-24T10:00:00.000000+05:30",
+    "publishedBy": "test-client"
+  }
+]
+```
+
+#### Create Function
+```http
+POST /v1/namespaces/{namespace-id}/functions
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "id": "max_income",
+  "type": "max",
+  "args": ["salary", "bonus"]
+}
+```
+
+**Response:**
+```json
+{
+  "function": {
+    "id": "max_income",
+    "version": 1,
+    "status": "draft",
+    "type": "max",
+    "args": ["salary", "bonus"],
+    "values": null,
+    "returnType": "number",
+    "createdAt": "2025-06-24T09:58:29.146389+05:30",
+    "createdBy": "test-client",
+    "publishedAt": null,
+    "publishedBy": null
+  }
+}
+```
+
+#### Get Function
+```http
+GET /v1/namespaces/{namespace-id}/functions/{function-id}
+Authorization: Bearer <token>
+```
+
+#### Update Function Draft
+```http
+PUT /v1/namespaces/{namespace-id}/functions/{function-id}/versions/draft
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "type": "max",
+  "args": ["salary", "bonus", "commission"]
+}
+```
+
+#### Publish Function
+```http
+POST /v1/namespaces/{namespace-id}/functions/{function-id}/publish
+Authorization: Bearer <token>
+```
+
 ### Health Check
 
 ```http
@@ -277,7 +405,7 @@ GET /health
 The API supports role-based access control:
 
 - **Admin**: Full access to all operations
-- **Viewer**: Read-only access to namespaces and fields
+- **Viewer**: Read-only access to namespaces, fields, and functions
 - **Executor**: Read access + execution capabilities (future)
 
 ### Required Permissions
@@ -290,6 +418,10 @@ The API supports role-based access control:
 | Delete Namespace | ✅ | ❌ | ❌ |
 | List Fields | ✅ | ✅ | ✅ |
 | Create Field | ✅ | ❌ | ❌ |
+| List Functions | ✅ | ✅ | ✅ |
+| Create Function | ✅ | ❌ | ❌ |
+| Update Function | ✅ | ❌ | ❌ |
+| Publish Function | ✅ | ❌ | ❌ |
 
 ## 🗄️ Database Schema
 
@@ -308,11 +440,30 @@ CREATE TABLE namespaces (
 CREATE TABLE fields (
     namespace    text REFERENCES namespaces(id) ON DELETE CASCADE,
     field_id     text,
-    type         text CHECK (type IN ('number','string')),
+    type         text CHECK (type IN ('number','string','boolean','date')),
     description  text,
     created_by   text NOT NULL,
     created_at   timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (namespace, field_id)
+);
+```
+
+### Functions Table
+```sql
+CREATE TABLE functions (
+    namespace     text REFERENCES namespaces(id) ON DELETE CASCADE,
+    function_id   text,
+    version       integer NOT NULL,
+    status        text CHECK (status IN ('draft','active','inactive')),
+    type          text NOT NULL,
+    args          text[],
+    values        text[],
+    return_type   text NOT NULL,
+    created_by    text NOT NULL,
+    published_by  text,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    published_at  timestamptz,
+    PRIMARY KEY (namespace, function_id, version)
 );
 ```
 
@@ -336,16 +487,33 @@ go test ./internal/repository -v
 ```
 
 ### Integration Testing
-```bash
-# Start the server
-go run ./cmd/api &
 
-# Test with curl
-curl -X POST http://localhost:8080/v1/namespaces \
-  -H "Authorization: Bearer $(go run ./cmd/jwt-generator -client-id test -role admin | grep -o 'Bearer [^ ]*' | tail -1)" \
-  -H "Content-Type: application/json" \
-  -d '{"id": "test-ns", "description": "Test namespace"}'
+#### Quick Tests
+```bash
+# Run quick API tests
+./scripts/test-api-quick.sh
 ```
+
+#### End-to-End Tests
+```bash
+# Run comprehensive E2E tests
+./scripts/test-api-e2e.sh
+```
+
+#### Functions API Tests
+```bash
+# Run functions-specific tests
+./scripts/test-functions-api.sh
+```
+
+### Test Architecture
+
+The testing strategy follows the Clean Architecture principles:
+
+- **Unit Tests**: Test each layer in isolation with mocks
+- **Integration Tests**: Test service layer with real repositories
+- **End-to-End Tests**: Test complete API workflows
+- **Shared Test Infrastructure**: Consolidated cleanup scripts and utilities
 
 ## 🏗️ Project Structure
 
@@ -360,7 +528,7 @@ rule-engine/
 │   ├── auth/               # Authentication utilities
 │   ├── bootstrap/          # Application initialization
 │   ├── config/             # Configuration management
-│   ├── domain/             # Domain models and errors
+│   ├── domain/             # Domain models, DTOs, and errors
 │   ├── execution/          # Rule execution engine
 │   ├── handlers/           # HTTP request handlers
 │   ├── infra/              # Infrastructure (DB, logging)
@@ -370,6 +538,11 @@ rule-engine/
 │   └── service/            # Business logic layer
 ├── migrations/             # Database migrations
 ├── queries/                # SQL queries for sqlc
+├── scripts/                # Test scripts and utilities
+│   ├── cleanup-test-data.sh # Shared test cleanup
+│   ├── test-api-e2e.sh     # End-to-end tests
+│   ├── test-api-quick.sh   # Quick tests
+│   └── test-functions-api.sh # Functions API tests
 └── Makefile               # Build automation
 ```
 
@@ -390,12 +563,70 @@ goose -dir migrations postgres "postgresql://postgres:postgres@localhost:5432/ru
 
 ### Adding New Features
 
-1. **Database Layer**: Add SQL queries to `queries/` directory
-2. **Models**: Run `sqlc generate` to update models
-3. **Repository**: Implement data access methods
-4. **Service**: Add business logic
-5. **Handler**: Create HTTP endpoints
-6. **Tests**: Add comprehensive test coverage
+1. **Domain Layer**: Define rich domain models with validation
+2. **Database Layer**: Add SQL queries to `queries/` directory
+3. **Models**: Run `sqlc generate` to update models
+4. **Repository**: Implement data access methods
+5. **Service**: Add business logic (orchestration only)
+6. **Handler**: Create HTTP endpoints with DTOs
+7. **Tests**: Add comprehensive test coverage
+
+### Architectural Guidelines
+
+#### Domain Models
+```go
+// Rich domain model with encapsulated validation
+type Namespace struct {
+    ID          string    `json:"id"`
+    Description string    `json:"description"`
+    CreatedAt   time.Time `json:"createdAt"`
+    CreatedBy   string    `json:"createdBy"`
+}
+
+func (n *Namespace) Validate() error {
+    // Validation logic encapsulated within the domain model
+    if n == nil {
+        return ErrValidationError
+    }
+    // ... validation rules
+    return nil
+}
+```
+
+#### Service Layer
+```go
+// Service depends on interfaces, not concrete types
+type NamespaceService struct {
+    namespaceRepo domain.NamespaceRepository
+}
+
+func (s *NamespaceService) CreateNamespace(ctx context.Context, namespace *domain.Namespace) error {
+    // Use domain validation
+    if err := namespace.Validate(); err != nil {
+        return err
+    }
+    // Business logic orchestration
+    return s.namespaceRepo.Create(ctx, namespace)
+}
+```
+
+#### Handler Layer
+```go
+// Handler uses DTOs and response handler for consistency
+type NamespaceHandler struct {
+    namespaceService service.NamespaceServiceInterface
+    responseHandler  *ResponseHandler
+}
+
+func (h *NamespaceHandler) CreateNamespace(c *gin.Context) {
+    var req domain.CreateNamespaceRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        h.responseHandler.BadRequest(c, "Invalid request body")
+        return
+    }
+    // ... handler logic
+}
+```
 
 ### Error Handling
 
@@ -468,7 +699,7 @@ Use the `/health` endpoint for load balancer health checks.
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
+3. Make your changes following Clean Architecture principles
 4. Add tests for new functionality
 5. Ensure all tests pass
 6. Submit a pull request
@@ -478,6 +709,8 @@ Use the `/health` endpoint for load balancer health checks.
 - Use meaningful variable and function names
 - Add comments for complex logic
 - Keep functions small and focused
+- Follow Clean Architecture principles
+- Use rich domain models with encapsulated validation
 
 ## 📄 License
 
@@ -493,7 +726,7 @@ For issues and questions:
 ## 🔮 Roadmap
 
 ### Planned Features
-- [ ] Functions API (CRUD operations)
+- [x] Functions API (CRUD operations) ✅
 - [ ] Rules API (rule definition and management)
 - [ ] Workflows API (workflow orchestration)
 - [ ] Terminals API (execution endpoints)
@@ -512,6 +745,15 @@ For issues and questions:
 - [ ] Load balancing support
 - [ ] Horizontal scaling
 
+### Architectural Enhancements
+- [x] Clean Architecture implementation ✅
+- [x] Rich domain models ✅
+- [x] Framework-agnostic business logic ✅
+- [x] Comprehensive testing strategy ✅
+- [ ] Event sourcing
+- [ ] CQRS pattern
+- [ ] Microservices architecture
+
 ---
 
-**Generic Rule Engine** - A powerful, scalable rule engine for modern applications.
+**Generic Rule Engine** - A powerful, scalable rule engine built with Clean Architecture principles for modern applications.

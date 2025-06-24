@@ -291,12 +291,6 @@ test_fields_api() {
     make_request "DELETE" "/v1/namespaces/fields-test-ns" "$admin_token" "" "204" "Delete namespace with fields"
 }
 
-# Function to clean up test data (namespaces, fields, functions, rules)
-cleanup_test_data() {
-    print_status "INFO" "Cleaning up test data"
-    psql -U postgres -d rule_engine_dev -c "DELETE FROM rules WHERE namespace IN ('test-e2e', 'test-functions', 'fields-test-ns', 'rbac-test-ns'); DELETE FROM functions WHERE namespace IN ('test-e2e', 'test-functions', 'fields-test-ns', 'rbac-test-ns'); DELETE FROM fields WHERE namespace IN ('test-e2e', 'test-functions', 'fields-test-ns', 'rbac-test-ns'); DELETE FROM namespaces WHERE id IN ('test-e2e', 'test-functions', 'fields-test-ns', 'rbac-test-ns');" > /dev/null 2>&1 || true
-}
-
 # Function to test functions API (Rules API not implemented yet)
 # This suite creates fields and functions that use those fields
 # It tests the complete function lifecycle: create, update, publish
@@ -504,7 +498,7 @@ main() {
     echo ""
 
     # Clean up any existing test data
-    cleanup_test_data
+    bash ./scripts/cleanup-test-data.sh
 
     # Wait for server to be ready
     if ! wait_for_server; then
