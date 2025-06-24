@@ -32,6 +32,7 @@ type Function struct {
 	Type        string     `json:"type"`
 	Args        []string   `json:"args"`
 	Values      []string   `json:"values"`
+	ReturnType  string     `json:"returnType"`
 	CreatedBy   string     `json:"createdBy"`
 	PublishedBy *string    `json:"publishedBy,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
@@ -138,9 +139,14 @@ const (
 
 // Function type constants
 const (
-	FunctionTypeComparison = "comparison"
-	FunctionTypeMath       = "math"
-	FunctionTypeString     = "string"
-	FunctionTypeDate       = "date"
-	FunctionTypeLogical    = "logical"
+	FunctionTypeMax = "max"
+	FunctionTypeSum = "sum"
+	FunctionTypeAvg = "avg"
+	FunctionTypeIn  = "in"
+)
+
+// Function return type constants
+const (
+	FunctionReturnTypeNumber = "number"
+	FunctionReturnTypeBool   = "bool"
 )

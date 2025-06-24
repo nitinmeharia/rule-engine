@@ -291,6 +291,81 @@ test_fields_api() {
     make_request "DELETE" "/v1/namespaces/fields-test-ns" "$admin_token" "" "204" "Delete namespace with fields"
 }
 
+# Function to clean up test data (namespaces, fields, functions, rules)
+cleanup_test_data() {
+    print_status "INFO" "Cleaning up test data"
+    psql -U postgres -d rule_engine_dev -c "DELETE FROM rules WHERE namespace IN ('test-e2e', 'test-functions', 'fields-test-ns', 'rbac-test-ns'); DELETE FROM functions WHERE namespace IN ('test-e2e', 'test-functions', 'fields-test-ns', 'rbac-test-ns'); DELETE FROM fields WHERE namespace IN ('test-e2e', 'test-functions', 'fields-test-ns', 'rbac-test-ns'); DELETE FROM namespaces WHERE id IN ('test-e2e', 'test-functions', 'fields-test-ns', 'rbac-test-ns');" > /dev/null 2>&1 || true
+}
+
+# Function to test functions API (Rules API not implemented yet)
+# This suite creates fields and functions that use those fields
+# It tests the complete function lifecycle: create, update, publish
+
+test_functions_api() {
+    print_status "INFO" "Testing Functions API"
+    echo "=================================="
+    local admin_token=$(generate_jwt_token "$CLIENT_ID" "$ADMIN_ROLE")
+    local viewer_token=$(generate_jwt_token "$CLIENT_ID" "$VIEWER_ROLE")
+
+    # Create a namespace for this suite
+    local ns_data='{"id": "test-e2e", "description": "Namespace for E2E logical tests"}'
+    make_request "POST" "/v1/namespaces" "$admin_token" "$ns_data" "201" "Create E2E test namespace"
+
+    # Create fields
+    local field_age='{"fieldId": "age", "type": "number", "description": "User age"}'
+    local field_income='{"fieldId": "income", "type": "number", "description": "User income"}'
+    local field_occupation='{"fieldId": "occupation", "type": "string", "description": "User occupation"}'
+    make_request "POST" "/v1/namespaces/test-e2e/fields" "$admin_token" "$field_age" "201" "Create field: age"
+    make_request "POST" "/v1/namespaces/test-e2e/fields" "$admin_token" "$field_income" "201" "Create field: income"
+    make_request "POST" "/v1/namespaces/test-e2e/fields" "$admin_token" "$field_occupation" "201" "Create field: occupation"
+
+    # Create functions using supported types
+    local fn_max_income='{"id": "max_income", "type": "max", "args": ["age", "income"]}'
+    local fn_total_income='{"id": "total_income", "type": "sum", "args": ["income"]}'
+    local fn_avg_age='{"id": "avg_age", "type": "avg", "args": ["age"]}'
+    local fn_valid_occupation='{"id": "valid_occupation", "type": "in", "values": ["salaried", "self_employed", "business"]}'
+    make_request "POST" "/v1/namespaces/test-e2e/functions" "$admin_token" "$fn_max_income" "201" "Create function: max_income"
+    make_request "POST" "/v1/namespaces/test-e2e/functions" "$admin_token" "$fn_total_income" "201" "Create function: total_income"
+    make_request "POST" "/v1/namespaces/test-e2e/functions" "$admin_token" "$fn_avg_age" "201" "Create function: avg_age"
+    make_request "POST" "/v1/namespaces/test-e2e/functions" "$admin_token" "$fn_valid_occupation" "201" "Create function: valid_occupation"
+
+    # List functions
+    make_request "GET" "/v1/namespaces/test-e2e/functions" "$viewer_token" "" "200" "List functions"
+
+    # Get specific function
+    make_request "GET" "/v1/namespaces/test-e2e/functions/max_income" "$viewer_token" "" "200" "Get max_income function"
+
+    # Update function draft
+    local update_data='{"type": "max", "args": ["age", "income", "bonus"]}'
+    make_request "PUT" "/v1/namespaces/test-e2e/functions/max_income/versions/draft" "$admin_token" "$update_data" "200" "Update function draft"
+
+    # Publish function
+    make_request "POST" "/v1/namespaces/test-e2e/functions/max_income/publish" "$admin_token" "" "200" "Publish function: max_income"
+    make_request "POST" "/v1/namespaces/test-e2e/functions/total_income/publish" "$admin_token" "" "200" "Publish function: total_income"
+    make_request "POST" "/v1/namespaces/test-e2e/functions/avg_age/publish" "$admin_token" "" "200" "Publish function: avg_age"
+    make_request "POST" "/v1/namespaces/test-e2e/functions/valid_occupation/publish" "$admin_token" "" "200" "Publish function: valid_occupation"
+
+    # Get published function
+    make_request "GET" "/v1/namespaces/test-e2e/functions/max_income" "$viewer_token" "" "200" "Get published function"
+
+    # Test edge cases
+    make_request "POST" "/v1/namespaces/test-e2e/functions" "$admin_token" '{"id":"max_income","type":"max","args":["salary"]}' "409" "Create duplicate function"
+    make_request "POST" "/v1/namespaces/test-e2e/functions" "$admin_token" '{"id":"invalid_func","type":"invalid","args":["salary"]}' "400" "Create function with invalid type"
+    make_request "POST" "/v1/namespaces/test-e2e/functions" "$admin_token" '{"id":"empty_max","type":"max","args":[]}' "400" "Create numeric function without args"
+    make_request "POST" "/v1/namespaces/test-e2e/functions" "$admin_token" '{"id":"empty_in","type":"in","values":[]}' "400" "Create in function without values"
+    make_request "GET" "/v1/namespaces/test-e2e/functions/non_existent" "$viewer_token" "" "404" "Get non-existent function"
+    make_request "PUT" "/v1/namespaces/test-e2e/functions/non_existent/versions/draft" "$admin_token" '{"type":"max","args":["salary"]}' "404" "Update non-existent function"
+    make_request "POST" "/v1/namespaces/test-e2e/functions/non_existent/publish" "$admin_token" "" "404" "Publish non-existent function"
+
+    # Test RBAC
+    make_request "GET" "/v1/namespaces/test-e2e/functions" "$viewer_token" "" "200" "Viewer can list functions"
+    make_request "GET" "/v1/namespaces/test-e2e/functions/max_income" "$viewer_token" "" "200" "Viewer can read function"
+    make_request "POST" "/v1/namespaces/test-e2e/functions" "$viewer_token" '{"id":"viewer_func","type":"max","args":["salary"]}' "403" "Viewer cannot create function"
+
+    # Clean up
+    make_request "DELETE" "/v1/namespaces/test-e2e" "$admin_token" "" "204" "Delete E2E test namespace"
+}
+
 # Function to test error handling
 test_error_handling() {
     print_status "INFO" "Testing Error Handling"
@@ -427,23 +502,27 @@ main() {
     echo "Client ID: $CLIENT_ID"
     echo "JWT Secret: $JWT_SECRET"
     echo ""
-    
+
+    # Clean up any existing test data
+    cleanup_test_data
+
     # Wait for server to be ready
     if ! wait_for_server; then
         print_status "FAIL" "Cannot proceed with tests - server not available"
         exit 1
     fi
-    
+
     # Run all test suites
     test_health_endpoint
     test_authentication
     test_namespaces_api
     test_fields_api
+    test_functions_api
     test_error_handling
     test_rbac
     test_edge_cases
     test_performance
-    
+
     # Print summary
     print_summary
 }
