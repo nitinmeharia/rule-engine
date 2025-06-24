@@ -55,6 +55,44 @@ Generic Rule Engine is a high-performance, stateless rule evaluation service for
 
 ---
 
+## Docker Quick Start
+
+**Using Docker Compose (Recommended):**
+```bash
+# Start the entire stack (PostgreSQL + Rule Engine)
+docker-compose up -d
+
+# Check logs
+docker-compose logs -f rule-engine
+
+# Stop the stack
+docker-compose down
+```
+
+**Using Docker directly:**
+```bash
+# Build the image
+docker build -t rule-engine .
+
+# Run with environment variables
+docker run -p 8080:8080 \
+  -e RULE_ENGINE_DATABASE__HOST=your-db-host \
+  -e RULE_ENGINE_DATABASE__PORT=5432 \
+  -e RULE_ENGINE_DATABASE__NAME=rule_engine \
+  -e RULE_ENGINE_DATABASE__USER=your-user \
+  -e RULE_ENGINE_DATABASE__PASSWORD=your-password \
+  rule-engine
+```
+
+**Docker Features:**
+- Multi-stage build for optimized image size
+- Non-root user for security
+- Health checks for monitoring
+- Alpine Linux base for minimal footprint
+- Proper handling of timezone and certificates
+
+---
+
 ## Core Concepts
 
 - **Namespace:** An isolated container for all other entities (fields, functions, rules, workflows, etc.).
