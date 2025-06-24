@@ -24,6 +24,7 @@ type Server struct {
 	logger           *logger.Logger
 	namespaceHandler *handlers.NamespaceHandler
 	fieldHandler     *handlers.FieldHandler
+	functionHandler  *handlers.FunctionHandler
 	address          string
 }
 
@@ -55,14 +56,17 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 	// Initialize repositories
 	namespaceRepo := repository.NewNamespaceRepository(queries)
 	fieldRepo := repository.NewFieldRepository(queries)
+	functionRepo := repository.NewFunctionRepository(queries)
 
 	// Initialize services
 	namespaceService := service.NewNamespaceService(namespaceRepo)
 	fieldService := service.NewFieldService(fieldRepo)
+	functionService := service.NewFunctionService(functionRepo)
 
 	// Initialize handlers
 	namespaceHandler := handlers.NewNamespaceHandler(namespaceService)
 	fieldHandler := handlers.NewFieldHandler(fieldService)
+	functionHandler := handlers.NewFunctionHandler(functionService)
 
 	// Create server instance first
 	server := &Server{
@@ -72,6 +76,7 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 		logger:           log,
 		namespaceHandler: namespaceHandler,
 		fieldHandler:     fieldHandler,
+		functionHandler:  functionHandler,
 		address:          cfg.Server.GetServerAddress(),
 	}
 
@@ -92,6 +97,13 @@ func New(cfg *config.Config, database *pgxpool.Pool, log *logger.Logger) (*Serve
 			// Field routes within namespace - nested under namespace ID
 			namespaces.GET("/:id/fields", RequireAnyRole("admin", "viewer", "executor"), fieldHandler.ListFields)
 			namespaces.POST("/:id/fields", RequireRole("admin"), fieldHandler.CreateField)
+
+			// Function routes within namespace - nested under namespace ID
+			namespaces.GET("/:id/functions", RequireAnyRole("admin", "viewer", "executor"), functionHandler.ListFunctions)
+			namespaces.POST("/:id/functions", RequireRole("admin"), functionHandler.CreateFunction)
+			namespaces.GET("/:id/functions/:functionId", RequireAnyRole("admin", "viewer", "executor"), functionHandler.GetFunction)
+			namespaces.PUT("/:id/functions/:functionId/versions/draft", RequireRole("admin"), functionHandler.UpdateFunction)
+			namespaces.POST("/:id/functions/:functionId/publish", RequireRole("admin"), functionHandler.PublishFunction)
 		}
 	}
 

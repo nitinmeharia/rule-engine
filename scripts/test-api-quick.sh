@@ -33,16 +33,17 @@ print_status() {
         "PASS")
             echo -e "${GREEN}✓ PASS${NC}: $message"
             PASSED_TESTS=$((PASSED_TESTS + 1))
+            TOTAL_TESTS=$((TOTAL_TESTS + 1))
             ;;
         "FAIL")
             echo -e "${RED}✗ FAIL${NC}: $message"
             FAILED_TESTS=$((FAILED_TESTS + 1))
+            TOTAL_TESTS=$((TOTAL_TESTS + 1))
             ;;
         "INFO")
             echo -e "${BLUE}ℹ INFO${NC}: $message"
             ;;
     esac
-    TOTAL_TESTS=$((TOTAL_TESTS + 1))
 }
 
 # Function to generate JWT token using conda Python
@@ -136,6 +137,41 @@ check_server() {
     fi
 }
 
+# Function to clean up test data (namespaces, fields, functions, rules)
+cleanup_test_data() {
+    print_status "INFO" "Cleaning up test data"
+    psql -U postgres -d rule_engine_dev -c "DELETE FROM rules WHERE namespace IN ('quick-test-ns', 'fields-quick-test'); DELETE FROM functions WHERE namespace IN ('quick-test-ns', 'fields-quick-test'); DELETE FROM fields WHERE namespace IN ('quick-test-ns', 'fields-quick-test'); DELETE FROM namespaces WHERE id IN ('quick-test-ns', 'fields-quick-test');" > /dev/null 2>&1 || true
+}
+
+# Minimal logical functions test (Rules API not implemented yet)
+quick_functions_test() {
+    print_status "INFO" "Quick functions test"
+    local admin_token=$(generate_jwt_token "$CLIENT_ID" "admin")
+
+    # Create namespace
+    local ns_data='{"id": "quick-test-ns", "description": "Quick test namespace"}'
+    make_request "POST" "/v1/namespaces" "$admin_token" "$ns_data" "201" "Create quick-test-ns"
+
+    # Create field
+    local field_data='{"fieldId": "score", "type": "number", "description": "User score"}'
+    make_request "POST" "/v1/namespaces/quick-test-ns/fields" "$admin_token" "$field_data" "201" "Create field: score"
+
+    # Create function using the field (supported type: max)
+    local fn_data='{"id": "max_score", "type": "max", "args": ["score"]}'
+    make_request "POST" "/v1/namespaces/quick-test-ns/functions" "$admin_token" "$fn_data" "201" "Create function: max_score"
+    make_request "POST" "/v1/namespaces/quick-test-ns/functions/max_score/publish" "$admin_token" "" "200" "Publish function: max_score"
+
+    # Test function operations
+    make_request "GET" "/v1/namespaces/quick-test-ns/functions" "$admin_token" "" "200" "List functions"
+    make_request "GET" "/v1/namespaces/quick-test-ns/functions/max_score" "$admin_token" "" "200" "Get function: max_score"
+
+    # Test edge case
+    make_request "POST" "/v1/namespaces/quick-test-ns/functions" "$admin_token" '{"id":"max_score","type":"max","args":["score"]}' "409" "Create duplicate function"
+
+    # Clean up
+    make_request "DELETE" "/v1/namespaces/quick-test-ns" "$admin_token" "" "204" "Delete quick-test-ns"
+}
+
 # Main test execution
 main() {
     echo "=========================================="
@@ -143,6 +179,9 @@ main() {
     echo "=========================================="
     echo "Base URL: $BASE_URL"
     echo ""
+    
+    # Clean up any existing test data
+    cleanup_test_data
     
     # Check if server is running
     if ! check_server; then
@@ -184,6 +223,9 @@ main() {
     
     # Cleanup
     make_request "DELETE" "/v1/namespaces/fields-quick-test" "$admin_token" "" "204" "Cleanup test namespace"
+    
+    # Quick logical functions test
+    quick_functions_test
     
     # Print summary
     echo ""
